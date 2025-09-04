@@ -1,13 +1,17 @@
 import { Injectable, Logger } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { ElevenLabsClient } from "elevenlabs";
+import { CacheService } from "./cache.service";
 
 @Injectable()
 export class ElevenlabsService {
   private elevenlabs: ElevenLabsClient;
   private readonly logger = new Logger("ElevenlabsService");
 
-  constructor(private configService: ConfigService) {
+  constructor(
+    private configService: ConfigService,
+    private cacheService: CacheService
+  ) {
     const apiKey = this.configService.get<string>("ELEVENLABS_API_KEY");
     this.logger.log(
       `🔑 Initializing ElevenLabs with API key: ${apiKey ? apiKey.substring(0, 10) + "..." : "NOT SET"}`
@@ -21,6 +25,13 @@ export class ElevenlabsService {
   }
 
   async textToSpeech(text: string): Promise<Buffer> {
+    // Check cache first
+    const cachedAudio = await this.cacheService.getCachedAudio(text);
+    if (cachedAudio) {
+      this.logger.log(`🎵 Using cached audio for: "${text.substring(0, 30)}..."`);
+      return cachedAudio;
+    }
+
     this.logger.log(
       `🔊 Starting text-to-speech for text: "${text}" (${text.length} characters)`
     );
@@ -66,6 +77,9 @@ export class ElevenlabsService {
         audioStream.on("end", () => {
           const duration = Date.now() - startTime;
           const finalBuffer = Buffer.concat(chunks);
+
+          // Cache the audio
+          this.cacheService.cacheAudio(text, finalBuffer, 7200); // 2 hours TTL
 
           this.logger.log(`✅ ElevenLabs TTS completed in ${duration}ms`);
           this.logger.log(

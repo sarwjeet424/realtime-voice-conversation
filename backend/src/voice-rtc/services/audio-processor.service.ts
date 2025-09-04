@@ -1,5 +1,6 @@
 import { Injectable, Logger } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
+import { CacheService } from "./cache.service";
 
 @Injectable()
 export class AudioProcessorService {
@@ -7,7 +8,10 @@ export class AudioProcessorService {
   private readonly sampleRate: number;
   private readonly logger = new Logger("AudioProcessorService");
 
-  constructor(private configService: ConfigService) {
+  constructor(
+    private configService: ConfigService,
+    private cacheService: CacheService
+  ) {
     this.bufferSize = this.configService.get("VOICE_BUFFER_SIZE", 4096);
     this.sampleRate = this.configService.get("AUDIO_SAMPLE_RATE", 16000);
 
@@ -155,6 +159,183 @@ export class AudioProcessorService {
     );
 
     return normalizedData;
+  }
+
+  // Advanced audio processing methods
+  async applyNoiseReduction(audioBuffer: Buffer): Promise<Buffer> {
+    this.logger.log(`🔇 Applying noise reduction to ${audioBuffer.length} bytes`);
+    
+    // Simple noise reduction using spectral subtraction
+    const audioData = new Float32Array(audioBuffer.buffer, audioBuffer.byteOffset, audioBuffer.byteLength / 4);
+    const processedData = new Float32Array(audioData.length);
+    
+    const noiseFloor = 0.01; // Threshold for noise
+    
+    for (let i = 0; i < audioData.length; i++) {
+      const sample = audioData[i];
+      if (Math.abs(sample) < noiseFloor) {
+        processedData[i] = sample * 0.1; // Reduce noise
+      } else {
+        processedData[i] = sample;
+      }
+    }
+    
+    return Buffer.from(processedData.buffer);
+  }
+
+  async applyEchoCancellation(audioBuffer: Buffer): Promise<Buffer> {
+    this.logger.log(`🔄 Applying echo cancellation to ${audioBuffer.length} bytes`);
+    
+    // Simple echo cancellation using delay and subtraction
+    const audioData = new Float32Array(audioBuffer.buffer, audioBuffer.byteOffset, audioBuffer.byteLength / 4);
+    const processedData = new Float32Array(audioData.length);
+    
+    const delay = 100; // 100 samples delay
+    const echoGain = 0.3;
+    
+    for (let i = 0; i < audioData.length; i++) {
+      let sample = audioData[i];
+      
+      // Subtract delayed version to cancel echo
+      if (i >= delay) {
+        sample -= audioData[i - delay] * echoGain;
+      }
+      
+      processedData[i] = sample;
+    }
+    
+    return Buffer.from(processedData.buffer);
+  }
+
+  async enhanceAudio(audioBuffer: Buffer): Promise<Buffer> {
+    this.logger.log(`✨ Enhancing audio quality for ${audioBuffer.length} bytes`);
+    
+    // Apply multiple enhancements
+    let enhanced = await this.applyNoiseReduction(audioBuffer);
+    enhanced = await this.applyEchoCancellation(enhanced);
+    enhanced = await this.normalizeAudioBuffer(enhanced);
+    
+    return enhanced;
+  }
+
+  private async normalizeAudioBuffer(audioBuffer: Buffer): Promise<Buffer> {
+    const audioData = new Float32Array(audioBuffer.buffer, audioBuffer.byteOffset, audioBuffer.byteLength / 4);
+    const normalizedData = this.normalizeAudio(audioData);
+    return Buffer.from(normalizedData.buffer);
+  }
+
+  async detectVoiceActivity(audioBuffer: Buffer): Promise<{ isVoice: boolean; confidence: number }> {
+    const audioData = new Float32Array(audioBuffer.buffer, audioBuffer.byteOffset, audioBuffer.byteLength / 4);
+    
+    // Calculate energy and zero-crossing rate
+    let energy = 0;
+    let zeroCrossings = 0;
+    
+    for (let i = 0; i < audioData.length; i++) {
+      energy += audioData[i] * audioData[i];
+      
+      if (i > 0 && ((audioData[i] >= 0) !== (audioData[i - 1] >= 0))) {
+        zeroCrossings++;
+      }
+    }
+    
+    const avgEnergy = energy / audioData.length;
+    const zcr = zeroCrossings / audioData.length;
+    
+    // Voice activity detection based on energy and ZCR
+    const isVoice = avgEnergy > 0.001 && zcr < 0.3;
+    const confidence = Math.min(1, avgEnergy * 1000);
+    
+    this.logger.debug(`🎤 Voice activity: ${isVoice}, confidence: ${confidence.toFixed(3)}`);
+    
+    return { isVoice, confidence };
+  }
+
+  async extractAudioFeatures(audioBuffer: Buffer): Promise<{
+    mfcc: number[];
+    spectralCentroid: number;
+    spectralRolloff: number;
+    zeroCrossingRate: number;
+  }> {
+    const audioData = new Float32Array(audioBuffer.buffer, audioBuffer.byteOffset, audioBuffer.byteLength / 4);
+    
+    // Simplified feature extraction
+    const mfcc = this.calculateMFCC(audioData);
+    const spectralCentroid = this.calculateSpectralCentroid(audioData);
+    const spectralRolloff = this.calculateSpectralRolloff(audioData);
+    const zeroCrossingRate = this.calculateZeroCrossingRate(audioData);
+    
+    return {
+      mfcc,
+      spectralCentroid,
+      spectralRolloff,
+      zeroCrossingRate,
+    };
+  }
+
+  private calculateMFCC(audioData: Float32Array): number[] {
+    // Simplified MFCC calculation
+    const mfcc = [];
+    const frameSize = 512;
+    
+    for (let i = 0; i < Math.min(13, Math.floor(audioData.length / frameSize)); i++) {
+      const start = i * frameSize;
+      const end = Math.min(start + frameSize, audioData.length);
+      const frame = audioData.slice(start, end);
+      
+      // Simple energy calculation as MFCC approximation
+      let energy = 0;
+      for (let j = 0; j < frame.length; j++) {
+        energy += frame[j] * frame[j];
+      }
+      mfcc.push(Math.log(energy + 1e-10));
+    }
+    
+    return mfcc;
+  }
+
+  private calculateSpectralCentroid(audioData: Float32Array): number {
+    let weightedSum = 0;
+    let magnitudeSum = 0;
+    
+    for (let i = 0; i < audioData.length; i++) {
+      const magnitude = Math.abs(audioData[i]);
+      weightedSum += i * magnitude;
+      magnitudeSum += magnitude;
+    }
+    
+    return magnitudeSum > 0 ? weightedSum / magnitudeSum : 0;
+  }
+
+  private calculateSpectralRolloff(audioData: Float32Array): number {
+    const threshold = 0.85;
+    let cumulativeEnergy = 0;
+    let totalEnergy = 0;
+    
+    for (let i = 0; i < audioData.length; i++) {
+      totalEnergy += audioData[i] * audioData[i];
+    }
+    
+    for (let i = 0; i < audioData.length; i++) {
+      cumulativeEnergy += audioData[i] * audioData[i];
+      if (cumulativeEnergy >= threshold * totalEnergy) {
+        return i / audioData.length;
+      }
+    }
+    
+    return 1;
+  }
+
+  private calculateZeroCrossingRate(audioData: Float32Array): number {
+    let crossings = 0;
+    
+    for (let i = 1; i < audioData.length; i++) {
+      if ((audioData[i] >= 0) !== (audioData[i - 1] >= 0)) {
+        crossings++;
+      }
+    }
+    
+    return crossings / (audioData.length - 1);
   }
 
   // Utility method to analyze audio characteristics

@@ -1,6 +1,7 @@
 // src/App.tsx
 import React, { useEffect, useRef, useState } from "react";
 import { io, Socket } from "socket.io-client";
+import Avatar3D from "./components/Avatar3D";
 import "./App.css";
 
 declare global {
@@ -17,6 +18,11 @@ export default function App() {
   const [processing, setProcessing] = useState(false);
   const [conversationActive, setConversationActive] = useState(false);
   const [botSpeaking, setBotSpeaking] = useState(false);
+  const [streaming, setStreaming] = useState(false);
+  const [streamingText, setStreamingText] = useState("");
+  const [currentEmotion, setCurrentEmotion] = useState<'happy' | 'sad' | 'angry' | 'excited' | 'calm' | 'confused' | 'neutral'>('neutral');
+  const [aiModel, setAiModel] = useState<string>('GPT-3.5');
+  const [confidence, setConfidence] = useState<number>(0.8);
   const [messages, setMessages] = useState<
     { role: "user" | "assistant"; text: string }[]
   >([]);
@@ -76,6 +82,46 @@ export default function App() {
       addLog(`🤖 AI says: "${text}"`);
       setMessages((m) => [...m, { role: "assistant", text }]);
     });
+    // Streaming events
+    s.on("streaming_start", ({ messageId }) => {
+      addLog("📡 Streaming started");
+      setStreaming(true);
+      setStreamingText("");
+    });
+
+    s.on("streaming_chunk", ({ content, fullContent }) => {
+      setStreamingText(fullContent);
+    });
+
+    s.on("streaming_complete", ({ fullContent }) => {
+      addLog("✅ Streaming completed");
+      setStreaming(false);
+      setStreamingText("");
+      setMessages((m) => [...m, { role: "assistant", text: fullContent }]);
+    });
+
+    s.on("streaming_error", ({ message }) => {
+      addLog(`❌ Streaming error: ${message}`);
+      setStreaming(false);
+      setStreamingText("");
+    });
+
+    // Advanced AI response handler
+    s.on("advanced_response", (data) => {
+      setProcessing(false);
+      setCurrentEmotion(data.emotion.emotion);
+      setAiModel(data.model);
+      setConfidence(data.confidence);
+      
+      setMessages((prev) => [
+        ...prev,
+        { role: "assistant", text: data.text },
+      ]);
+      
+      addLog(`Advanced response (${data.model}): ${data.text}`);
+      addLog(`Emotion: ${data.emotion.emotion} (${data.confidence})`);
+    });
+
     s.on("ai_audio", ({ audio }) => {
       addLog("🔊 Playing AI audio...");
       setBotSpeaking(true);
@@ -192,8 +238,8 @@ export default function App() {
 
           if (text && socket && connected) {
             setMessages((m) => [...m, { role: "user", text }]);
-            addLog(`📤 Sending text_message`);
-            socket.emit("text_message", { text });
+            addLog(`📤 Sending advanced_chat`);
+            socket.emit("advanced_chat", { text });
             setProcessing(true);
 
             // Stop recognition while processing
@@ -266,23 +312,12 @@ export default function App() {
         {/* Video/Avatar Section */}
         <section className="video-section">
           <div className="video-container">
-            <div className="avatar-placeholder">
-              <div className={`avatar ${botSpeaking ? "speaking" : ""}`}>
-                <div className="avatar-face">
-                  <div className="avatar-eyes">
-                    <div className="eye left"></div>
-                    <div className="eye right"></div>
-                  </div>
-                  <div className="avatar-mouth"></div>
-                </div>
-                {botSpeaking && (
-                  <div className="sound-waves">
-                    <div className="wave"></div>
-                    <div className="wave"></div>
-                    <div className="wave"></div>
-                  </div>
-                )}
-              </div>
+            <div className="avatar-3d-container">
+              <Avatar3D 
+                isSpeaking={botSpeaking} 
+                emotion={currentEmotion}
+                audioLevel={botSpeaking ? 0.8 : 0}
+              />
             </div>
           </div>
         </section>
@@ -307,13 +342,23 @@ export default function App() {
                 </div>
               ))
             )}
-            {processing && (
+            {processing && !streaming && (
               <div className="conversation-entry assistant processing">
                 <div className="entry-content">
                   <div className="typing-indicator">
                     <span></span>
                     <span></span>
                     <span></span>
+                  </div>
+                </div>
+              </div>
+            )}
+            {streaming && (
+              <div className="conversation-entry assistant streaming">
+                <div className="entry-content">
+                  <div className="streaming-text">
+                    {streamingText}
+                    <span className="streaming-cursor">|</span>
                   </div>
                 </div>
               </div>
@@ -391,6 +436,14 @@ export default function App() {
             <div className={`status-item ${botSpeaking ? "active" : ""}`}>
               <span className="status-icon">🔊</span>
               <span className="status-text">Speaking</span>
+            </div>
+            <div className="status-item emotion-indicator">
+              <span className="status-icon">😊</span>
+              <span className="status-text">{currentEmotion}</span>
+            </div>
+            <div className="status-item model-indicator">
+              <span className="status-icon">🧠</span>
+              <span className="status-text">{aiModel}</span>
             </div>
           </div>
         </section>
