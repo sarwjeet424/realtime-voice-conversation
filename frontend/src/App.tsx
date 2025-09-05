@@ -60,7 +60,7 @@ export default function App() {
   // Initialize socket once
   useEffect(() => {
     addLog("🔧 Connecting to server...");
-    const s = io("http://localhost:4000", {
+    const s = io("https://2f4plt7h-4000.inc1.devtunnels.ms", {
       transports: ["websocket"],
     });
     setSocket(s);

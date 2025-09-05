@@ -43,6 +43,9 @@ export class VoiceRtcGateway
   handleDisconnect(client: Socket) {
     this.logger.log(`📴 Client disconnected: ${client.id}`);
     this.sessions.delete(client.id); // clean up
+    
+    // Clean up any incomplete responses for this session
+    this.openAi.cleanupOldIncompleteResponses();
   }
 
   @SubscribeMessage("text_message")
@@ -56,10 +59,11 @@ export class VoiceRtcGateway
     this.logger.log(`📝 Received: "${data.text}" from ${sessionId}`);
 
     try {
-      // 1. Generate AI response with history
+      // 1. Generate AI response with history and session ID
       const aiResponse = await this.openAi.generateChatResponse(
         data.text,
-        history
+        history,
+        sessionId
       );
 
       // 2. Append user + assistant to history
