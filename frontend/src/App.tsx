@@ -60,7 +60,7 @@ export default function App() {
   // Initialize socket once
   useEffect(() => {
     addLog("🔧 Connecting to server...");
-    const s = io("https://2f4plt7h-4000.inc1.devtunnels.ms", {
+    const s = io("http://localhost:4000", {
       transports: ["websocket"],
     });
     setSocket(s);
@@ -186,6 +186,21 @@ export default function App() {
 
     rec.onresult = (e: any) => {
       for (let i = e.resultIndex; i < e.results.length; i++) {
+        console.log(
+          "value of botSpeaking && audioElementRef.current",
+          botSpeaking && audioElementRef.current,
+          botSpeaking,
+          audioElementRef.current
+        );
+        // Stop bot speaking when user starts speaking (even interim results)
+        // Check if audio element exists and is playing, regardless of botSpeaking state
+        if (audioElementRef.current && !audioElementRef.current.paused) {
+          addLog(`🔇 Stopping bot speech - user started speaking`);
+          audioElementRef.current.pause();
+          audioElementRef.current = null;
+          setBotSpeaking(false);
+        }
+
         if (e.results[i].isFinal) {
           const text = e.results[i][0].transcript.trim();
           addLog(`📝 Heard: "${text}"`);
