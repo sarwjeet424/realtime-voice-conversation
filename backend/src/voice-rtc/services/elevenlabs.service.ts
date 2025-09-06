@@ -27,7 +27,7 @@ export class ElevenlabsService {
 
     try {
       const voiceId = "OYTbf65OHHFELVut7v2H"; // Adam voice
-      const modelId = "eleven_flash_v2_5";
+      const modelId = "eleven_turbo_v2_5"; // FASTEST model
 
       this.logger.log(`🎯 Using voice: ${voiceId}, model: ${modelId}`);
       this.logger.log("📡 Sending TTS request to ElevenLabs...");
@@ -38,12 +38,12 @@ export class ElevenlabsService {
         text: text,
         model_id: modelId,
         voice_settings: {
-          stability: 0.5,
-          similarity_boost: 0.75,
+          stability: 0.3, // Lower for faster generation
+          similarity_boost: 0.5, // Lower for faster generation
           style: 0.0,
-          use_speaker_boost: true,
+          use_speaker_boost: false, // Disable for speed
         },
-        output_format: "mp3_22050_32",
+        output_format: "mp3_22050_32", // Lower quality for speed
       });
 
       this.logger.log("📦 Collecting audio stream chunks...");

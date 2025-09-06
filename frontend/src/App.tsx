@@ -27,6 +27,12 @@ export default function App() {
   const isRecognitionActiveRef = useRef(false);
   const audioElementRef = useRef<HTMLAudioElement | null>(null);
 
+  // Latency tracking refs
+  const latencyStartTime = useRef<number>(0);
+  const speechToTextTime = useRef<number>(0);
+  const textToSpeechStartTime = useRef<number>(0);
+  const textToSpeechEndTime = useRef<number>(0);
+
   // Logging helper
   const addLog = (msg: string) => {
     const t = new Date().toLocaleTimeString();
@@ -73,11 +79,24 @@ export default function App() {
       setConnected(false);
     });
     s.on("ai_response", ({ text }) => {
+      const aiResponseTime = Date.now();
+      const sttToAiTime = aiResponseTime - speechToTextTime.current;
+
       addLog(`🤖 AI says: "${text}"`);
+      addLog(
+        `⏱️ AI Response received at: ${aiResponseTime} (${sttToAiTime}ms after STT)`
+      );
       setMessages((m) => [...m, { role: "assistant", text }]);
     });
     s.on("ai_audio", ({ audio }) => {
+      textToSpeechStartTime.current = Date.now();
+      const aiToTtsTime =
+        textToSpeechStartTime.current - speechToTextTime.current;
+
       addLog("🔊 Playing AI audio...");
+      addLog(
+        `⏱️ TTS started at: ${textToSpeechStartTime.current} (${aiToTtsTime}ms after STT)`
+      );
       setBotSpeaking(true);
 
       // Stop any existing audio
@@ -96,7 +115,19 @@ export default function App() {
       audioElementRef.current = audioEl;
 
       audioEl.onended = () => {
+        textToSpeechEndTime.current = Date.now();
+        const totalLatency =
+          textToSpeechEndTime.current - latencyStartTime.current;
+        const ttsDuration =
+          textToSpeechEndTime.current - textToSpeechStartTime.current;
+
         addLog("🎵 AI audio ended");
+        addLog(`⏱️ TTS ended at: ${textToSpeechEndTime.current}`);
+        addLog(`⏱️ TTS duration: ${ttsDuration}ms`);
+        addLog(
+          `⏱️ TOTAL LATENCY: ${totalLatency}ms (from user speech to bot audio end)`
+        );
+
         setProcessing(false);
         setBotSpeaking(false);
         audioElementRef.current = null;
@@ -109,7 +140,13 @@ export default function App() {
       };
 
       audioEl.onerror = (e) => {
+        const errorTime = Date.now();
+        const totalLatency = errorTime - latencyStartTime.current;
+
         addLog(`❌ Audio error: ${e}`);
+        addLog(`⏱️ Error occurred at: ${errorTime}`);
+        addLog(`⏱️ TOTAL LATENCY (with error): ${totalLatency}ms`);
+
         setProcessing(false);
         setBotSpeaking(false);
         audioElementRef.current = null;
@@ -120,7 +157,13 @@ export default function App() {
       };
 
       audioEl.play().catch((e) => {
+        const playErrorTime = Date.now();
+        const totalLatency = playErrorTime - latencyStartTime.current;
+
         addLog(`❌ Audio play error: ${e.message}`);
+        addLog(`⏱️ Play error occurred at: ${playErrorTime}`);
+        addLog(`⏱️ TOTAL LATENCY (with play error): ${totalLatency}ms`);
+
         setProcessing(false);
         setBotSpeaking(false);
         audioElementRef.current = null;
@@ -203,7 +246,13 @@ export default function App() {
 
         if (e.results[i].isFinal) {
           const text = e.results[i][0].transcript.trim();
+
+          // Start latency tracking
+          latencyStartTime.current = Date.now();
+          speechToTextTime.current = Date.now();
+
           addLog(`📝 Heard: "${text}"`);
+          addLog(`⏱️ Speech-to-Text completed at: ${speechToTextTime.current}`);
 
           if (text && socket && connected) {
             setMessages((m) => [...m, { role: "user", text }]);

@@ -45,7 +45,7 @@ export class OpenAiService {
     const messages: ChatMessage[] = [
       {
         role: "system" as const,
-        content: "You are a helpful voice assistant. Always complete your thoughts and provide complete answers. If you were cut off in a previous response, continue from where you left off.",
+        content: "You are a helpful voice assistant. Keep responses SHORT and CONCISE (1-2 sentences max). Be direct and to the point. If you were cut off in a previous response, continue from where you left off.",
       },
       ...history,
       { role: "user" as const, content: continuationPrompt + userMessage },
@@ -57,8 +57,8 @@ export class OpenAiService {
       model: "gpt-3.5-turbo",
       messages:
         messages as OpenAI.Chat.Completions.ChatCompletionMessageParam[],
-      temperature: 0.7,
-      max_tokens: 150, // Increased to allow for longer responses
+      temperature: 0.5, // Lower for more consistent, faster responses
+      max_tokens: 50, // MUCH shorter responses for speed
     });
 
     const duration = Date.now() - start;
@@ -108,8 +108,8 @@ export class OpenAiService {
     
     const hasCutOffPattern = cutOffPatterns.some(pattern => pattern.test(response.trim()));
     
-    // Check if response is too short for a complete thought (less than 20 characters)
-    const isTooShort = response.trim().length < 20;
+    // Check if response is too short for a complete thought (less than 10 characters)
+    const isTooShort = response.trim().length < 10;
     
     // Check if response doesn't end with proper punctuation and has cut-off patterns
     const isIncomplete = (!endsWithPunctuation && hasCutOffPattern) || isTooShort;
