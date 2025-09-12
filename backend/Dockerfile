@@ -7,11 +7,14 @@ WORKDIR /app
 # Copy all source code first
 COPY backend/ .
 
-# Install dependencies
-RUN npm install --only=production
+# Install all dependencies (including dev dependencies for build)
+RUN npm install
 
 # Build the application
 RUN npm run build
+
+# Remove dev dependencies to reduce image size
+RUN npm prune --production
 
 # Expose port
 EXPOSE 3000
