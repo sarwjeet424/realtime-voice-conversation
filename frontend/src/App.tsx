@@ -308,6 +308,36 @@ export default function App() {
     setBotSpeaking(false);
   };
 
+  // Add error boundary logging
+  useEffect(() => {
+    const handleError = (error: ErrorEvent) => {
+      addLog(`❌ JavaScript Error: ${error.message}`);
+      console.error('App Error:', error);
+    };
+    
+    window.addEventListener('error', handleError);
+    return () => window.removeEventListener('error', handleError);
+  }, []);
+
+  // Log app initialization
+  useEffect(() => {
+    addLog("🚀 App initialized");
+    addLog(`🌍 Environment: ${process.env.NODE_ENV}`);
+    addLog(`🔗 Backend URL: ${process.env.REACT_APP_BACKEND_URL || 'Not set'}`);
+  }, []);
+
+  // Show loading state if no logs yet
+  if (logs.length === 0) {
+    return (
+      <div className="App">
+        <div style={{ padding: '20px', textAlign: 'center' }}>
+          <h1>Loading Voice Assistant...</h1>
+          <p>Initializing application...</p>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="App">
       {/* Header */}
