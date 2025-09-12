@@ -67,6 +67,7 @@ export default function App() {
   useEffect(() => {
     addLog("🔧 Connecting to server...");
     const backendUrl = process.env.REACT_APP_BACKEND_URL || "http://localhost:4000";
+    addLog(`🌐 Backend URL: ${backendUrl}`);
     const s = io(backendUrl, {
       transports: ["websocket"],
     });
