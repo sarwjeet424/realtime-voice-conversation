@@ -177,7 +177,7 @@ export default function App() {
     return () => {
       s.disconnect();
     };
-  }, []);
+  }, [startRecognition]);
 
   // Setup speech recognition once
   useEffect(() => {
@@ -280,7 +280,7 @@ export default function App() {
         }
       }
     };
-  }, [socket, connected]); // Only recreate when socket/connection changes
+  }, [socket, connected, botSpeaking, processing, startRecognition, stopRecognition]); // Only recreate when socket/connection changes
 
   const startConversation = () => {
     if (!recognitionRef.current || !connected) return;
