@@ -1,5 +1,5 @@
 // src/App.tsx
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useRef, useState, useCallback } from "react";
 import { io, Socket } from "socket.io-client";
 import "./App.css";
 
@@ -42,7 +42,7 @@ export default function App() {
   };
 
   // Safe recognition start/stop helpers
-  const startRecognition = () => {
+  const startRecognition = useCallback(() => {
     if (!recognitionRef.current || isRecognitionActiveRef.current) return;
     try {
       recognitionRef.current.start();
@@ -51,9 +51,9 @@ export default function App() {
       addLog(`❌ Failed to start recognition: ${error}`);
       isRecognitionActiveRef.current = false;
     }
-  };
+  }, []);
 
-  const stopRecognition = () => {
+  const stopRecognition = useCallback(() => {
     if (!recognitionRef.current || !isRecognitionActiveRef.current) return;
     try {
       recognitionRef.current.stop();
@@ -61,7 +61,7 @@ export default function App() {
     } catch (error) {
       addLog(`❌ Failed to stop recognition: ${error}`);
     }
-  };
+  }, []);
 
   // Initialize socket once
   useEffect(() => {
