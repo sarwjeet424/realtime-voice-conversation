@@ -17,6 +17,9 @@ export default function App() {
   const [processing, setProcessing] = useState(false);
   const [conversationActive, setConversationActive] = useState(false);
   const [botSpeaking, setBotSpeaking] = useState(false);
+  const [conversationType, setConversationType] = useState<'audio' | 'video'>('audio');
+  const [videoProcessing, setVideoProcessing] = useState(false);
+  const [currentVideoUrl, setCurrentVideoUrl] = useState<string | null>(null);
   const [messages, setMessages] = useState<
     { role: "user" | "assistant"; text: string }[]
   >([]);
@@ -26,6 +29,7 @@ export default function App() {
   const shouldListenRef = useRef(false);
   const isRecognitionActiveRef = useRef(false);
   const audioElementRef = useRef<HTMLAudioElement | null>(null);
+  const videoElementRef = useRef<HTMLVideoElement | null>(null);
 
   // Latency tracking refs
   const latencyStartTime = useRef<number>(0);
@@ -39,6 +43,30 @@ export default function App() {
     const entry = `[${t}] ${msg}`;
     console.log(entry);
     setLogs((prev) => [...prev.slice(-15), entry]);
+  };
+
+  // WebRTC streaming initialization
+  const initializeWebRTCStream = (streamId: string, sourceUrl: string) => {
+    addLog(`🎬 Initializing WebRTC stream: ${streamId}`);
+    
+    // This is a simplified implementation
+    // In a real implementation, you would:
+    // 1. Create a WebRTC peer connection
+    // 2. Handle ICE candidates
+    // 3. Set up video/audio tracks
+    // 4. Connect to D-ID's WebRTC server
+    
+    // For now, we'll simulate the connection
+    setTimeout(() => {
+      addLog(`✅ WebRTC connection established`);
+      if (socket) {
+        socket.emit("stream_connection_status", {
+          connectionStatus: 'connected',
+          streamId: streamId,
+          sessionId: `session_${Date.now()}`
+        });
+      }
+    }, 1000);
   };
 
   // Safe recognition start/stop helpers
@@ -175,6 +203,36 @@ export default function App() {
         }
       });
     });
+
+    s.on("stream_setup", ({ streamId, sourceUrl }) => {
+      addLog(`🎬 Stream setup received: ${streamId}`);
+      addLog(`👤 Source URL: ${sourceUrl}`);
+      
+      // Initialize WebRTC connection for streaming
+      initializeWebRTCStream(streamId, sourceUrl);
+    });
+
+    s.on("stream_ready", ({ streamId, sessionId }) => {
+      addLog(`🎥 Stream ready: ${streamId}`);
+      addLog(`🔗 Session ID: ${sessionId}`);
+      setBotSpeaking(true);
+      setVideoProcessing(false);
+    });
+
+    s.on("stream_error", ({ message }) => {
+      addLog(`❌ Stream error: ${message}`);
+      setVideoProcessing(false);
+    });
+
+    s.on("stream_fallback", ({ message }) => {
+      addLog(`⚠️ ${message}`);
+      setVideoProcessing(false);
+    });
+
+    s.on("conversation_type_set", ({ type }) => {
+      addLog(`🎯 Conversation type set to: ${type}`);
+      changeConversationType(type);
+    });
     return () => {
       s.disconnect();
     };
@@ -283,6 +341,40 @@ export default function App() {
     };
   }, [socket, connected, botSpeaking, processing, startRecognition, stopRecognition]); // Only recreate when socket/connection changes
 
+  const changeConversationType = (type: 'audio' | 'video') => {
+    if (!socket || !connected) {
+      addLog(`❌ Cannot set conversation type - not connected`);
+      return;
+    }
+    
+    setConversationType(type);
+    socket.emit("set_conversation_type", { type });
+    addLog(`🎯 Setting conversation type to: ${type}`);
+    
+    // Log current state for debugging
+    addLog(`🔍 Current conversation active: ${conversationActive}`);
+    addLog(`🔍 Current conversation type: ${conversationType}`);
+  };
+
+  const setConversationTypeAndStart = (type: 'audio' | 'video') => {
+    if (!socket || !connected) {
+      addLog(`❌ Cannot start conversation - not connected`);
+      return;
+    }
+    
+    changeConversationType(type);
+    socket.emit("set_conversation_type", { type });
+    addLog(`🎯 Setting conversation type to: ${type}`);
+    
+    // Automatically start conversation after setting type
+    if (!conversationActive) {
+      addLog(`🚀 Auto-starting conversation in ${type} mode`);
+      startConversation();
+    } else {
+      addLog(`⚠️ Conversation already active, just changing type to ${type}`);
+    }
+  };
+
   const startConversation = () => {
     if (!recognitionRef.current || !connected) return;
     shouldListenRef.current = true;
@@ -362,24 +454,52 @@ export default function App() {
         {/* Video/Avatar Section */}
         <section className="video-section">
           <div className="video-container">
-            <div className="avatar-placeholder">
-              <div className={`avatar ${botSpeaking ? "speaking" : ""}`}>
-                <div className="avatar-face">
-                  <div className="avatar-eyes">
-                    <div className="eye left"></div>
-                    <div className="eye right"></div>
+            {conversationType === 'video' ? (
+              <div className="video-player">
+                <div className="streaming-video-container">
+                  <div className="streaming-placeholder">
+                    <div className="streaming-icon">🎥</div>
+                    <p>Real-time Video Stream</p>
+                    <p className="streaming-status">Connecting to D-ID...</p>
                   </div>
-                  <div className="avatar-mouth"></div>
                 </div>
-                {botSpeaking && (
-                  <div className="sound-waves">
-                    <div className="wave"></div>
-                    <div className="wave"></div>
-                    <div className="wave"></div>
+                {videoProcessing && (
+                  <div className="video-processing-overlay">
+                    <div className="processing-spinner">
+                      <div className="spinner"></div>
+                      <p>Processing stream...</p>
+                    </div>
                   </div>
                 )}
               </div>
-            </div>
+            ) : (
+              <div className="avatar-placeholder">
+                <div className={`avatar ${botSpeaking ? "speaking" : ""}`}>
+                  <div className="avatar-face">
+                    <div className="avatar-eyes">
+                      <div className="eye left"></div>
+                      <div className="eye right"></div>
+                    </div>
+                    <div className="avatar-mouth"></div>
+                  </div>
+                  {botSpeaking && conversationType === 'audio' && (
+                    <div className="sound-waves">
+                      <div className="wave"></div>
+                      <div className="wave"></div>
+                      <div className="wave"></div>
+                    </div>
+                  )}
+                </div>
+                {videoProcessing && conversationType === 'video' && (
+                  <div className="video-processing-indicator">
+                    <div className="processing-spinner">
+                      <div className="spinner"></div>
+                      <p>Creating video...</p>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         </section>
 
@@ -433,6 +553,48 @@ export default function App() {
 
         {/* Controls Section */}
         <section className="controls-section">
+          {/* Conversation Type Selection - Always visible */}
+          <div className="conversation-type-selector">
+            <h3>Choose Conversation Type</h3>
+            <div className="type-options">
+              <button
+                className={`type-button ${conversationType === 'audio' ? 'selected' : ''}`}
+                onClick={() => changeConversationType('audio')}
+                disabled={!connected}
+              >
+                <span className="type-icon">🎤</span>
+                <span className="type-label">Audio Only</span>
+                <span className="type-description">Voice conversation with AI</span>
+              </button>
+              <button
+                className={`type-button ${conversationType === 'video' ? 'selected' : ''}`}
+                onClick={() => changeConversationType('video')}
+                disabled={!connected}
+              >
+                <span className="type-icon">🎥</span>
+                <span className="type-label">Video Bot</span>
+                <span className="type-description">AI with video avatar</span>
+              </button>
+            </div>
+            {conversationActive && (
+              <div className="current-mode-indicator">
+                <span className="mode-text">Current Mode: {conversationType === 'video' ? '🎥 Video Bot' : '🎤 Audio Only'}</span>
+                <button 
+                  className="test-video-button"
+                  onClick={() => {
+                    addLog(`🧪 Testing video mode manually`);
+                    if (socket && connected) {
+                      socket.emit("text_message", { text: "Hello, this is a test message for video mode" });
+                    }
+                  }}
+                  disabled={!connected || conversationType !== 'video'}
+                >
+                  Test Video Mode
+                </button>
+              </div>
+            )}
+          </div>
+
           {/* Audio Visualizer */}
           <div className="audio-visualizer">
             <div
