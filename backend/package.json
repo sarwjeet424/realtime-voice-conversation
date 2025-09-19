@@ -21,6 +21,7 @@
     "@nestjs/platform-express": "^10.3.0",
     "@nestjs/platform-socket.io": "^10.3.0",
     "@nestjs/websockets": "^10.3.0",
+    "@supabase/supabase-js": "^2.57.4",
     "elevenlabs": "^0.9.0",
     "openai": "^4.24.0",
     "reflect-metadata": "^0.2.1",

@@ -13,6 +13,14 @@ declare global {
 export default function App() {
   const [socket, setSocket] = useState<Socket>();
   const [connected, setConnected] = useState(false);
+  const [authenticated, setAuthenticated] = useState(false);
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [sessionInfo, setSessionInfo] = useState<{
+    timeRemaining: number;
+    messageCount: number;
+    isActive: boolean;
+  } | null>(null);
   const [recognizing, setRecognizing] = useState(false);
   const [processing, setProcessing] = useState(false);
   const [conversationActive, setConversationActive] = useState(false);
@@ -43,10 +51,16 @@ export default function App() {
 
   // Safe recognition start/stop helpers
   const startRecognition = useCallback(() => {
-    if (!recognitionRef.current || isRecognitionActiveRef.current) return;
+    addLog(`🎤 Attempting to start recognition: recognitionRef=${!!recognitionRef.current}, isActive=${isRecognitionActiveRef.current}`);
+    if (!recognitionRef.current || isRecognitionActiveRef.current) {
+      addLog(`❌ Cannot start recognition: recognitionRef=${!!recognitionRef.current}, isActive=${isRecognitionActiveRef.current}`);
+      return;
+    }
     try {
+      addLog(`🎤 Starting speech recognition...`);
       recognitionRef.current.start();
       isRecognitionActiveRef.current = true;
+      addLog(`✅ Speech recognition started successfully`);
     } catch (error) {
       addLog(`❌ Failed to start recognition: ${error}`);
       isRecognitionActiveRef.current = false;
@@ -80,7 +94,54 @@ export default function App() {
       addLog(`📴 Disconnected: ${r}`);
       setConnected(false);
     });
-    s.on("ai_response", ({ text }) => {
+    s.on("auth_success", ({ sessionId, expiresAt, timeRemaining }) => {
+      addLog(`✅ Authenticated successfully! Session expires in ${Math.round(timeRemaining / 1000)}s`);
+      setAuthenticated(true);
+      setSessionInfo({
+        timeRemaining,
+        messageCount: 0,
+        isActive: true
+      });
+      
+      // Automatically start conversation after authentication
+      setTimeout(() => {
+        addLog("🚀 Auto-starting conversation...");
+        startConversation();
+      }, 1000);
+    });
+
+    s.on("auth_error", ({ message }) => {
+      addLog(`❌ Authentication failed: ${message}`);
+      setAuthenticated(false);
+      
+      // Show specific message for blocked users
+      if (message.includes("monthly session limit")) {
+        addLog(`📅 This email has already used its monthly session limit`);
+        addLog(`⏰ Please try again next month or use a different email address`);
+      } else if (message.includes("daily session limit") || message.includes("blocked")) {
+        addLog(`🚫 This email has already used its daily session limit`);
+        addLog(`⏰ Please try again tomorrow or use a different email address`);
+      }
+    });
+
+    s.on("session_expired", ({ message, timeRemaining }) => {
+      addLog(`⏰ Session expired: ${message}`);
+      setAuthenticated(false);
+      setSessionInfo(null);
+      setConversationActive(false);
+      stopRecognition();
+    });
+
+    s.on("session_info", (info) => {
+      if (info.error) {
+        addLog(`❌ Session error: ${info.error}`);
+      } else {
+        setSessionInfo(info);
+        addLog(`📊 Session info: ${Math.round(info.timeRemaining / 1000)}s remaining, ${info.messageCount} messages`);
+      }
+    });
+
+    s.on("ai_response", ({ text, timeRemaining }) => {
       const aiResponseTime = Date.now();
       const sttToAiTime = aiResponseTime - speechToTextTime.current;
 
@@ -89,6 +150,11 @@ export default function App() {
         `⏱️ AI Response received at: ${aiResponseTime} (${sttToAiTime}ms after STT)`
       );
       setMessages((m) => [...m, { role: "assistant", text }]);
+      
+      // Update session info if provided
+      if (timeRemaining !== undefined) {
+        setSessionInfo(prev => prev ? { ...prev, timeRemaining } : null);
+      }
     });
     s.on("ai_audio", ({ audio }) => {
       textToSpeechStartTime.current = Date.now();
@@ -182,17 +248,20 @@ export default function App() {
 
   // Setup speech recognition once
   useEffect(() => {
+    addLog("🎤 Setting up speech recognition...");
     const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
     if (!SR) {
       addLog("❌ SpeechRecognition not supported");
       return;
     }
+    addLog("✅ SpeechRecognition is supported");
 
     const rec = new SR();
     rec.continuous = true;
     rec.interimResults = false;
     rec.maxAlternatives = 1;
     rec.lang = "en-US";
+    addLog("✅ Speech recognition configured");
 
     rec.onstart = () => {
       addLog("🎙️ Listening started");
@@ -201,7 +270,7 @@ export default function App() {
     };
 
     rec.onerror = (e: any) => {
-      addLog(`❌ Recognition error: ${e.error}`);
+      addLog(`❌ Recognition error: ${e.error} - ${e.message || 'No message'}`);
       setRecognizing(false);
       isRecognitionActiveRef.current = false;
 
@@ -214,6 +283,8 @@ export default function App() {
         setTimeout(() => startRecognition(), 2000);
       } else if (e.error === "not-allowed" && shouldListenRef.current) {
         addLog("🚫 Microphone permission denied");
+      } else {
+        addLog(`❌ Unhandled recognition error: ${e.error}`);
       }
     };
 
@@ -230,7 +301,10 @@ export default function App() {
     };
 
     rec.onresult = (e: any) => {
+      addLog(`🎤 Speech recognition result received: ${e.results.length} results`);
       for (let i = e.resultIndex; i < e.results.length; i++) {
+        addLog(`🎤 Result ${i}: isFinal=${e.results[i].isFinal}, transcript="${e.results[i][0].transcript}"`);
+        
         console.log(
           "value of botSpeaking && audioElementRef.current",
           botSpeaking && audioElementRef.current,
@@ -248,6 +322,7 @@ export default function App() {
 
         if (e.results[i].isFinal) {
           const text = e.results[i][0].transcript.trim();
+          addLog(`📝 Final transcript: "${text}"`);
 
           // Start latency tracking
           latencyStartTime.current = Date.now();
@@ -257,6 +332,7 @@ export default function App() {
           addLog(`⏱️ Speech-to-Text completed at: ${speechToTextTime.current}`);
 
           if (text && socket && connected) {
+            addLog(`📤 Sending text_message to socket`);
             setMessages((m) => [...m, { role: "user", text }]);
             addLog(`📤 Sending text_message`);
             socket.emit("text_message", { text });
@@ -264,6 +340,8 @@ export default function App() {
 
             // Stop recognition while processing
             stopRecognition();
+          } else {
+            addLog(`❌ Cannot send message: text="${text}", socket=${!!socket}, connected=${connected}`);
           }
         }
       }
@@ -283,8 +361,28 @@ export default function App() {
     };
   }, [socket, connected, botSpeaking, processing, startRecognition, stopRecognition]); // Only recreate when socket/connection changes
 
+  const handleAuthenticate = () => {
+    if (!socket || !connected || !email.trim() || !password.trim()) {
+      addLog("❌ Please enter both email and password");
+      return;
+    }
+
+    addLog(`🔐 Authenticating with email: ${email}`);
+    socket.emit("authenticate", { email: email.trim(), password: password.trim() });
+  };
+
+  const getSessionInfo = () => {
+    if (socket && connected) {
+      socket.emit("get_session_info");
+    }
+  };
+
   const startConversation = () => {
-    if (!recognitionRef.current || !connected) return;
+    addLog(`🚀 Starting conversation: recognitionRef=${!!recognitionRef.current}, connected=${connected}, authenticated=${authenticated}`);
+    if (!recognitionRef.current || !connected || !authenticated) {
+      addLog("❌ Please authenticate first");
+      return;
+    }
     shouldListenRef.current = true;
     setConversationActive(true);
     addLog("🚀 Conversation mode ON");
@@ -306,6 +404,13 @@ export default function App() {
     // Reset states
     setProcessing(false);
     setBotSpeaking(false);
+  };
+
+  const formatTime = (ms: number) => {
+    const seconds = Math.max(0, Math.floor(ms / 1000));
+    const minutes = Math.floor(seconds / 60);
+    const remainingSeconds = seconds % 60;
+    return `${minutes}:${remainingSeconds.toString().padStart(2, '0')}`;
   };
 
   // Add error boundary logging
@@ -351,11 +456,62 @@ export default function App() {
           >
             {connected ? "🟢 Connected" : "🔴 Disconnected"}
           </div>
-          <div className="latency">
-            {conversationActive ? "Active Session" : "Ready"}
+          <div
+            className={`connection-status ${
+              authenticated ? "connected" : "disconnected"
+            }`}
+          >
+            {authenticated ? "🔐 Authenticated" : "🔒 Not Authenticated"}
           </div>
+          {sessionInfo && (
+            <div className="latency">
+              ⏰ {formatTime(sessionInfo.timeRemaining)} remaining
+            </div>
+          )}
         </div>
       </header>
+
+      {/* Authentication Section */}
+      {!authenticated && (
+        <section className="auth-section">
+          <div className="auth-container">
+            <h2>🔐 Authentication Required</h2>
+            <p>Enter your credentials to start a 5-minute voice conversation session</p>
+            <div className="auth-form">
+              <input
+                type="email"
+                placeholder="Enter your email address"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                className="email-input"
+                disabled={!connected}
+              />
+              <input
+                type="password"
+                placeholder="Enter your password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                onKeyPress={(e) => e.key === 'Enter' && handleAuthenticate()}
+                className="password-input"
+                disabled={!connected}
+              />
+              <button
+                onClick={handleAuthenticate}
+                disabled={!connected || !email.trim() || !password.trim()}
+                className="auth-button"
+              >
+                {connected ? "Start Session" : "Connecting..."}
+              </button>
+            </div>
+            <div className="auth-info">
+              <p>⏰ Each session lasts 5 minutes</p>
+              <p>💬 Limited to 20 messages per session</p>
+              <p>🔑 Valid credentials required to access</p>
+              <p>👑 Admin users have unlimited access</p>
+            </div>
+          </div>
+        </section>
+      )}
 
       {/* Main Content */}
       <main className="main-content">
@@ -444,6 +600,29 @@ export default function App() {
             ></div>
           </div>
 
+          {/* Session Info */}
+          {authenticated && sessionInfo && (
+            <div className="session-info">
+              <div className="session-stats">
+                <div className="stat-item">
+                  <span className="stat-label">Time Remaining:</span>
+                  <span className="stat-value">{formatTime(sessionInfo.timeRemaining)}</span>
+                </div>
+                    <div className="stat-item">
+                      <span className="stat-label">Messages:</span>
+                      <span className="stat-value">{sessionInfo.messageCount}/20</span>
+                    </div>
+                <div className="stat-item">
+                  <span className="stat-label">Status:</span>
+                  <span className="stat-value">{sessionInfo.isActive ? "Active" : "Expired"}</span>
+                </div>
+              </div>
+              <button onClick={getSessionInfo} className="info-button">
+                🔄 Refresh Session Info
+              </button>
+            </div>
+          )}
+
           {/* Main Controls */}
           <div className="main-controls">
             <button
@@ -453,7 +632,7 @@ export default function App() {
               onClick={
                 conversationActive ? stopConversation : startConversation
               }
-              disabled={!connected}
+              disabled={!connected || !authenticated}
             >
               {processing ? (
                 <>
