@@ -5,7 +5,7 @@ FROM node:18-alpine
 WORKDIR /app
 
 # Copy all source code first
-COPY backend/ .
+COPY . .
 
 # Install all dependencies (including dev dependencies for build)
 RUN npm install
@@ -17,7 +17,7 @@ RUN npm run build
 RUN npm prune --production
 
 # Expose port
-EXPOSE 3000
+EXPOSE 4000
 
 # Start the application
 CMD ["npm", "run", "start:prod"]
