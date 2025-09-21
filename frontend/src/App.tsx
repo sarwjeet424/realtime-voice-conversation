@@ -25,6 +25,7 @@ export default function App() {
   const [processing, setProcessing] = useState(false);
   const [conversationActive, setConversationActive] = useState(false);
   const [botSpeaking, setBotSpeaking] = useState(false);
+  const [trialExpired, setTrialExpired] = useState(false);
   const [messages, setMessages] = useState<
     { role: "user" | "assistant"; text: string }[]
   >([]);
@@ -51,9 +52,13 @@ export default function App() {
 
   // Safe recognition start/stop helpers
   const startRecognition = useCallback(() => {
-    addLog(`🎤 Attempting to start recognition: recognitionRef=${!!recognitionRef.current}, isActive=${isRecognitionActiveRef.current}`);
+    addLog(`🎤 Attempting to start recognition: recognitionRef=${!!recognitionRef.current}, isActive=${isRecognitionActiveRef.current}, trialExpired=${trialExpired}`);
     if (!recognitionRef.current || isRecognitionActiveRef.current) {
       addLog(`❌ Cannot start recognition: recognitionRef=${!!recognitionRef.current}, isActive=${isRecognitionActiveRef.current}`);
+      return;
+    }
+    if (trialExpired) {
+      addLog(`❌ Cannot start recognition: Trial session has expired`);
       return;
     }
     try {
@@ -65,7 +70,7 @@ export default function App() {
       addLog(`❌ Failed to start recognition: ${error}`);
       isRecognitionActiveRef.current = false;
     }
-  }, []);
+  }, [trialExpired]);
 
   const stopRecognition = useCallback(() => {
     if (!recognitionRef.current || !isRecognitionActiveRef.current) return;
@@ -126,10 +131,27 @@ export default function App() {
 
     s.on("session_expired", ({ message, timeRemaining }) => {
       addLog(`⏰ Session expired: ${message}`);
+      addLog(`🔄 Setting trial expired state and stopping all activities`);
+      
+      // Stop all activities immediately
       setAuthenticated(false);
       setSessionInfo(null);
       setConversationActive(false);
+      setProcessing(false);
+      setBotSpeaking(false);
+      setRecognizing(false);
+      setTrialExpired(true);
+      
+      // Stop recognition
       stopRecognition();
+      
+      // Stop any playing audio
+      if (audioElementRef.current) {
+        audioElementRef.current.pause();
+        audioElementRef.current = null;
+      }
+      
+      addLog(`✅ Trial expired UI should now be visible`);
     });
 
     s.on("session_info", (info) => {
@@ -201,9 +223,11 @@ export default function App() {
         audioElementRef.current = null;
 
         // Resume recognition after a short delay
-        if (shouldListenRef.current) {
+        if (shouldListenRef.current && !trialExpired) {
           addLog("▶️ Resuming recognition");
           setTimeout(() => startRecognition(), 300);
+        } else if (trialExpired) {
+          addLog("❌ Not resuming recognition: Trial session has expired");
         }
       };
 
@@ -219,8 +243,10 @@ export default function App() {
         setBotSpeaking(false);
         audioElementRef.current = null;
 
-        if (shouldListenRef.current) {
+        if (shouldListenRef.current && !trialExpired) {
           setTimeout(() => startRecognition(), 300);
+        } else if (trialExpired) {
+          addLog("❌ Not resuming recognition: Trial session has expired");
         }
       };
 
@@ -236,8 +262,10 @@ export default function App() {
         setBotSpeaking(false);
         audioElementRef.current = null;
 
-        if (shouldListenRef.current) {
+        if (shouldListenRef.current && !trialExpired) {
           setTimeout(() => startRecognition(), 300);
+        } else if (trialExpired) {
+          addLog("❌ Not resuming recognition: Trial session has expired");
         }
       });
     });
@@ -275,14 +303,16 @@ export default function App() {
       isRecognitionActiveRef.current = false;
 
       // Handle different error types
-      if (e.error === "no-speech" && shouldListenRef.current && !botSpeaking) {
+      if (e.error === "no-speech" && shouldListenRef.current && !botSpeaking && !trialExpired) {
         addLog("🔄 No speech detected, restarting...");
         setTimeout(() => startRecognition(), 1000);
-      } else if (e.error === "audio-capture" && shouldListenRef.current) {
+      } else if (e.error === "audio-capture" && shouldListenRef.current && !trialExpired) {
         addLog("🎤 Audio capture error, retrying...");
         setTimeout(() => startRecognition(), 2000);
       } else if (e.error === "not-allowed" && shouldListenRef.current) {
         addLog("🚫 Microphone permission denied");
+      } else if (trialExpired) {
+        addLog("❌ Not restarting recognition: Trial session has expired");
       } else {
         addLog(`❌ Unhandled recognition error: ${e.error}`);
       }
@@ -293,10 +323,12 @@ export default function App() {
       setRecognizing(false);
       isRecognitionActiveRef.current = false;
 
-      // Only restart if we should be listening and bot isn't speaking
-      if (shouldListenRef.current && !botSpeaking && !processing) {
+      // Only restart if we should be listening and bot isn't speaking and trial hasn't expired
+      if (shouldListenRef.current && !botSpeaking && !processing && !trialExpired) {
         addLog("▶️ Auto-restarting recognition");
         setTimeout(() => startRecognition(), 500);
+      } else if (trialExpired) {
+        addLog("❌ Not restarting recognition: Trial session has expired");
       }
     };
 
@@ -331,7 +363,7 @@ export default function App() {
           addLog(`📝 Heard: "${text}"`);
           addLog(`⏱️ Speech-to-Text completed at: ${speechToTextTime.current}`);
 
-          if (text && socket && connected) {
+          if (text && socket && connected && !trialExpired) {
             addLog(`📤 Sending text_message to socket`);
             setMessages((m) => [...m, { role: "user", text }]);
             addLog(`📤 Sending text_message`);
@@ -340,6 +372,8 @@ export default function App() {
 
             // Stop recognition while processing
             stopRecognition();
+          } else if (trialExpired) {
+            addLog(`❌ Cannot send message: Trial session has expired`);
           } else {
             addLog(`❌ Cannot send message: text="${text}", socket=${!!socket}, connected=${connected}`);
           }
@@ -367,6 +401,8 @@ export default function App() {
       return;
     }
 
+    // Reset trial expired state when starting new authentication
+    setTrialExpired(false);
     addLog(`🔐 Authenticating with email: ${email}`);
     socket.emit("authenticate", { email: email.trim(), password: password.trim() });
   };
@@ -378,9 +414,13 @@ export default function App() {
   };
 
   const startConversation = () => {
-    addLog(`🚀 Starting conversation: recognitionRef=${!!recognitionRef.current}, connected=${connected}, authenticated=${authenticated}`);
+    addLog(`🚀 Starting conversation: recognitionRef=${!!recognitionRef.current}, connected=${connected}, authenticated=${authenticated}, trialExpired=${trialExpired}`);
     if (!recognitionRef.current || !connected || !authenticated) {
       addLog("❌ Please authenticate first");
+      return;
+    }
+    if (trialExpired) {
+      addLog("❌ Trial session has expired");
       return;
     }
     shouldListenRef.current = true;
@@ -472,7 +512,7 @@ export default function App() {
       </header>
 
       {/* Authentication Section */}
-      {!authenticated && (
+      {!authenticated && !trialExpired && (
         <section className="auth-section">
           <div className="auth-container">
             <h2>🔐 Authentication Required</h2>
@@ -513,7 +553,43 @@ export default function App() {
         </section>
       )}
 
+      {/* Trial Expired Section */}
+      {trialExpired && (
+        <section className="trial-expired-section">
+          <div className="trial-expired-container">
+            <div className="trial-expired-icon">⏰</div>
+            <h2>Trial Session Expired</h2>
+            <p>Your 5-minute trial session has ended. Thank you for trying our voice assistant!</p>
+            <div className="trial-expired-info">
+              <div className="info-item">
+                <span className="info-icon">⏱️</span>
+                <span>Session Duration: 5 minutes</span>
+              </div>
+              <div className="info-item">
+                <span className="info-icon">💬</span>
+                <span>Message Limit: 20 messages</span>
+              </div>
+              <div className="info-item">
+                <span className="info-icon">🔄</span>
+                <span>New credentials needed for another session</span>
+              </div>
+            </div>
+            <button
+              onClick={() => {
+                setTrialExpired(false);
+                setEmail("");
+                setPassword("");
+              }}
+              className="retry-button"
+            >
+              Try Again with New Credentials
+            </button>
+          </div>
+        </section>
+      )}
+
       {/* Main Content */}
+      {!trialExpired && (
       <main className="main-content">
         {/* Video/Avatar Section */}
         <section className="video-section">
@@ -670,6 +746,7 @@ export default function App() {
           </div>
         </section>
       </main>
+      )}
 
       {/* Footer */}
       <footer className="app-footer">
