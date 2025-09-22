@@ -27,6 +27,7 @@ export class VoiceRtcGateway
 {
   @WebSocketServer() server: Server;
   private readonly logger = new Logger("VoiceRtcGateway");
+  private clientEmails = new Map<string, string>(); // Map client.id to email
 
   // Map client.id -> conversation history
   private sessions = new Map<string, ChatHistoryEntry[]>();
@@ -45,6 +46,7 @@ export class VoiceRtcGateway
   handleDisconnect(client: Socket) {
     this.logger.log(`📴 Client disconnected: ${client.id}`);
     this.sessions.delete(client.id); // clean up
+    this.clientEmails.delete(client.id); // clean up email mapping
     
     // Clean up any incomplete responses for this session
     this.openAi.cleanupOldIncompleteResponses();
@@ -91,6 +93,9 @@ export class VoiceRtcGateway
       // Store session ID in client data
       (client as any).sessionId = sessionResult.sessionId;
       (client as any).email = data.email;
+      
+      // Store email mapping for reconnection handling
+      this.clientEmails.set(client.id, data.email);
 
       client.emit("auth_success", {
         sessionId: sessionResult.sessionId,
@@ -102,6 +107,37 @@ export class VoiceRtcGateway
     } catch (err) {
       this.logger.error(`💥 Auth error for ${client.id}: ${err.message}`);
       client.emit("auth_error", { message: err.message });
+    }
+  }
+
+  @SubscribeMessage("start_conversation")
+  async handleStartConversation(@ConnectedSocket() client: Socket) {
+    try {
+      const email = (client as any).email || this.clientEmails.get(client.id);
+      
+      if (!email) {
+        client.emit("conversation_error", { message: "Please authenticate first" });
+        return;
+      }
+
+      // Start conversation with session expiry check and sessions_used increment
+      const conversationResult = await this.authService.startConversation(email);
+      
+      if (!conversationResult.success) {
+        this.logger.log(`❌ Conversation start failed for ${email}: ${conversationResult.reason}`);
+        client.emit("conversation_error", { message: conversationResult.reason });
+        return;
+      }
+
+      this.logger.log(`✅ Conversation started for ${email}`);
+      client.emit("conversation_started", {
+        sessionId: conversationResult.sessionId,
+        messageCount: conversationResult.messageCount,
+        timeRemaining: conversationResult.timeRemaining
+      });
+    } catch (err) {
+      this.logger.error(`💥 Conversation start error for ${client.id}: ${err.message}`);
+      client.emit("conversation_error", { message: err.message });
     }
   }
 

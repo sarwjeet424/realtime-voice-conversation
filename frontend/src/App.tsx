@@ -124,11 +124,6 @@ export default function App() {
         isActive: true,
       });
 
-      // Automatically start conversation after authentication
-      setTimeout(() => {
-        addLog("🚀 Auto-starting conversation...");
-        startConversation();
-      }, 1000);
     });
 
     s.on("auth_error", ({ message }) => {
@@ -151,6 +146,31 @@ export default function App() {
       } else if (message.includes("Session limit reached")) {
         addLog(`🚫 Session limit reached for this user`);
         addLog(`⏰ Please contact admin for new credentials`);
+      }
+    });
+
+    s.on("conversation_started", ({ sessionId, messageCount, timeRemaining }) => {
+      addLog(`✅ Conversation started successfully`);
+      addLog(`📊 Session ID: ${sessionId}`);
+      addLog(`💬 Message count: ${messageCount}`);
+      addLog(`⏰ Time remaining: ${Math.floor(timeRemaining / 1000)}s`);
+      
+      // Start the actual conversation
+      shouldListenRef.current = true;
+      setConversationActive(true);
+      addLog("🚀 Conversation mode ON");
+      addLog(`🎤 Starting recognition: recognitionRef=${!!recognitionRef.current}`);
+      startRecognition();
+    });
+
+    s.on("conversation_error", ({ message }) => {
+      addLog(`❌ Conversation start failed: ${message}`);
+      setAuthError(message);
+      
+      // If session expired, set trial expired state
+      if (message.includes("expired") || message.includes("No active session")) {
+        setTrialExpired(true);
+        addLog("⏰ Session has expired. Please start a new session.");
       }
     });
 
@@ -486,10 +506,14 @@ export default function App() {
       addLog("❌ Trial session has expired");
       return;
     }
-    shouldListenRef.current = true;
-    setConversationActive(true);
-    addLog("🚀 Conversation mode ON");
-    startRecognition();
+    
+    // Emit start_conversation event to backend
+    if (socket) {
+      addLog("📤 Emitting start_conversation event");
+      socket.emit("start_conversation");
+    } else {
+      addLog("❌ Socket not available");
+    }
   };
 
   const stopConversation = () => {

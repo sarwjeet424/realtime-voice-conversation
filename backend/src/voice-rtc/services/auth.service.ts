@@ -137,9 +137,6 @@ export class AuthService {
         isActive: true,
       });
 
-      // Increment sessions used
-      await this.supabaseService.incrementSessionsUsed(email);
-
       this.logger.log(`Session created for ${email} - expires at ${new Date(expiresAt).toISOString()}`);
       return { sessionId, expiresAt, success: true };
     } catch (error) {
@@ -198,6 +195,36 @@ export class AuthService {
     } catch (error) {
       this.logger.error("Error incrementing message count:", error);
       return { success: false, reason: "Failed to increment message count" };
+    }
+  }
+
+  async startConversation(email: string): Promise<{ success: boolean; reason?: string; sessionId?: string; messageCount?: number; timeRemaining?: number }> {
+    try {
+      // Check if user has an active session
+      const session = await this.supabaseService.getActiveSession(email);
+      if (!session) {
+        return { success: false, reason: "No active session found" };
+      }
+
+      // Check if session is expired
+      const now = Date.now();
+      const timeRemaining = session.startTime + this.SESSION_DURATION - now;
+      if (timeRemaining <= 0) {
+        return { success: false, reason: "Session has expired" };
+      }
+
+      // Increment sessions used only when starting conversation
+      await this.supabaseService.incrementSessionsUsed(email);
+
+      return {
+        success: true,
+        sessionId: `${email}_${session.startTime}_${Math.random().toString(36).substr(2, 9)}`,
+        messageCount: session.messageCount,
+        timeRemaining,
+      };
+    } catch (error) {
+      this.logger.error("Error starting conversation:", error);
+      return { success: false, reason: "Failed to start conversation" };
     }
   }
 
