@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { VoiceRtcModule } from './voice-rtc/voice-rtc.module';
+import { AdminModule } from './admin/admin.module';
 import { HealthController } from './health.controller';
 import { AuthService } from './voice-rtc/services/auth.service';
 import { SupabaseService } from './voice-rtc/services/supabase.service';
@@ -11,6 +12,7 @@ import { SupabaseService } from './voice-rtc/services/supabase.service';
       isGlobal: true,
     }),
     VoiceRtcModule,
+    AdminModule,
   ],
   controllers: [HealthController],
   providers: [AuthService, SupabaseService],

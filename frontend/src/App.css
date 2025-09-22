@@ -72,6 +72,27 @@
   backdrop-filter: blur(10px);
 }
 
+.admin-link {
+  padding: 8px 16px;
+  background: rgba(255, 215, 0, 0.15);
+  color: #ffd700;
+  border: 1px solid rgba(255, 215, 0, 0.4);
+  border-radius: 20px;
+  font-size: 0.9rem;
+  font-weight: 600;
+  text-decoration: none;
+  transition: all 0.3s ease;
+  backdrop-filter: blur(10px);
+  box-shadow: 0 0 20px rgba(255, 215, 0, 0.2);
+}
+
+.admin-link:hover {
+  background: rgba(255, 215, 0, 0.25);
+  border-color: rgba(255, 215, 0, 0.6);
+  box-shadow: 0 0 25px rgba(255, 215, 0, 0.3);
+  transform: translateY(-1px);
+}
+
 .main-content {
   flex: 1;
   display: flex;

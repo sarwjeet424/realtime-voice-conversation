@@ -1,6 +1,7 @@
 // src/App.tsx
 import React, { useEffect, useRef, useState, useCallback } from "react";
 import { io, Socket } from "socket.io-client";
+import AdminPanel from "./AdminPanel";
 import "./App.css";
 
 declare global {
@@ -11,6 +12,7 @@ declare global {
 }
 
 export default function App() {
+  const [isAdminRoute, setIsAdminRoute] = useState(false);
   const [socket, setSocket] = useState<Socket>();
   const [connected, setConnected] = useState(false);
   const [authenticated, setAuthenticated] = useState(false);
@@ -43,18 +45,26 @@ export default function App() {
   const textToSpeechEndTime = useRef<number>(0);
 
   // Logging helper
-  const addLog = (msg: string) => {
+  const addLog = useCallback((msg: string) => {
     const t = new Date().toLocaleTimeString();
     const entry = `[${t}] ${msg}`;
     console.log(entry);
     setLogs((prev) => [...prev.slice(-15), entry]);
-  };
+  }, []);
 
   // Safe recognition start/stop helpers
   const startRecognition = useCallback(() => {
-    addLog(`🎤 Attempting to start recognition: recognitionRef=${!!recognitionRef.current}, isActive=${isRecognitionActiveRef.current}, trialExpired=${trialExpired}`);
+    addLog(
+      `🎤 Attempting to start recognition: recognitionRef=${!!recognitionRef.current}, isActive=${
+        isRecognitionActiveRef.current
+      }, trialExpired=${trialExpired}`
+    );
     if (!recognitionRef.current || isRecognitionActiveRef.current) {
-      addLog(`❌ Cannot start recognition: recognitionRef=${!!recognitionRef.current}, isActive=${isRecognitionActiveRef.current}`);
+      addLog(
+        `❌ Cannot start recognition: recognitionRef=${!!recognitionRef.current}, isActive=${
+          isRecognitionActiveRef.current
+        }`
+      );
       return;
     }
     if (trialExpired) {
@@ -85,7 +95,8 @@ export default function App() {
   // Initialize socket once
   useEffect(() => {
     addLog("🔧 Connecting to server...");
-    const backendUrl = process.env.REACT_APP_BACKEND_URL || "http://localhost:4000";
+    const backendUrl =
+      process.env.REACT_APP_BACKEND_URL || "http://localhost:4000";
     addLog(`🌐 Backend URL: ${backendUrl}`);
     const s = io(backendUrl, {
       transports: ["websocket"],
@@ -100,14 +111,18 @@ export default function App() {
       setConnected(false);
     });
     s.on("auth_success", ({ sessionId, expiresAt, timeRemaining }) => {
-      addLog(`✅ Authenticated successfully! Session expires in ${Math.round(timeRemaining / 1000)}s`);
+      addLog(
+        `✅ Authenticated successfully! Session expires in ${Math.round(
+          timeRemaining / 1000
+        )}s`
+      );
       setAuthenticated(true);
       setSessionInfo({
         timeRemaining,
         messageCount: 0,
-        isActive: true
+        isActive: true,
       });
-      
+
       // Automatically start conversation after authentication
       setTimeout(() => {
         addLog("🚀 Auto-starting conversation...");
@@ -118,12 +133,17 @@ export default function App() {
     s.on("auth_error", ({ message }) => {
       addLog(`❌ Authentication failed: ${message}`);
       setAuthenticated(false);
-      
+
       // Show specific message for blocked users
       if (message.includes("monthly session limit")) {
         addLog(`📅 This email has already used its monthly session limit`);
-        addLog(`⏰ Please try again next month or use a different email address`);
-      } else if (message.includes("daily session limit") || message.includes("blocked")) {
+        addLog(
+          `⏰ Please try again next month or use a different email address`
+        );
+      } else if (
+        message.includes("daily session limit") ||
+        message.includes("blocked")
+      ) {
         addLog(`🚫 This email has already used its daily session limit`);
         addLog(`⏰ Please try again tomorrow or use a different email address`);
       }
@@ -132,7 +152,7 @@ export default function App() {
     s.on("session_expired", ({ message, timeRemaining }) => {
       addLog(`⏰ Session expired: ${message}`);
       addLog(`🔄 Setting trial expired state and stopping all activities`);
-      
+
       // Stop all activities immediately
       setAuthenticated(false);
       setSessionInfo(null);
@@ -141,16 +161,16 @@ export default function App() {
       setBotSpeaking(false);
       setRecognizing(false);
       setTrialExpired(true);
-      
+
       // Stop recognition
       stopRecognition();
-      
+
       // Stop any playing audio
       if (audioElementRef.current) {
         audioElementRef.current.pause();
         audioElementRef.current = null;
       }
-      
+
       addLog(`✅ Trial expired UI should now be visible`);
     });
 
@@ -159,7 +179,11 @@ export default function App() {
         addLog(`❌ Session error: ${info.error}`);
       } else {
         setSessionInfo(info);
-        addLog(`📊 Session info: ${Math.round(info.timeRemaining / 1000)}s remaining, ${info.messageCount} messages`);
+        addLog(
+          `📊 Session info: ${Math.round(
+            info.timeRemaining / 1000
+          )}s remaining, ${info.messageCount} messages`
+        );
       }
     });
 
@@ -172,10 +196,10 @@ export default function App() {
         `⏱️ AI Response received at: ${aiResponseTime} (${sttToAiTime}ms after STT)`
       );
       setMessages((m) => [...m, { role: "assistant", text }]);
-      
+
       // Update session info if provided
       if (timeRemaining !== undefined) {
-        setSessionInfo(prev => prev ? { ...prev, timeRemaining } : null);
+        setSessionInfo((prev) => (prev ? { ...prev, timeRemaining } : null));
       }
     });
     s.on("ai_audio", ({ audio }) => {
@@ -272,7 +296,7 @@ export default function App() {
     return () => {
       s.disconnect();
     };
-  }, [startRecognition]);
+  }, [startRecognition, stopRecognition, addLog]);
 
   // Setup speech recognition once
   useEffect(() => {
@@ -298,15 +322,24 @@ export default function App() {
     };
 
     rec.onerror = (e: any) => {
-      addLog(`❌ Recognition error: ${e.error} - ${e.message || 'No message'}`);
+      addLog(`❌ Recognition error: ${e.error} - ${e.message || "No message"}`);
       setRecognizing(false);
       isRecognitionActiveRef.current = false;
 
       // Handle different error types
-      if (e.error === "no-speech" && shouldListenRef.current && !botSpeaking && !trialExpired) {
+      if (
+        e.error === "no-speech" &&
+        shouldListenRef.current &&
+        !botSpeaking &&
+        !trialExpired
+      ) {
         addLog("🔄 No speech detected, restarting...");
         setTimeout(() => startRecognition(), 1000);
-      } else if (e.error === "audio-capture" && shouldListenRef.current && !trialExpired) {
+      } else if (
+        e.error === "audio-capture" &&
+        shouldListenRef.current &&
+        !trialExpired
+      ) {
         addLog("🎤 Audio capture error, retrying...");
         setTimeout(() => startRecognition(), 2000);
       } else if (e.error === "not-allowed" && shouldListenRef.current) {
@@ -324,7 +357,12 @@ export default function App() {
       isRecognitionActiveRef.current = false;
 
       // Only restart if we should be listening and bot isn't speaking and trial hasn't expired
-      if (shouldListenRef.current && !botSpeaking && !processing && !trialExpired) {
+      if (
+        shouldListenRef.current &&
+        !botSpeaking &&
+        !processing &&
+        !trialExpired
+      ) {
         addLog("▶️ Auto-restarting recognition");
         setTimeout(() => startRecognition(), 500);
       } else if (trialExpired) {
@@ -333,10 +371,14 @@ export default function App() {
     };
 
     rec.onresult = (e: any) => {
-      addLog(`🎤 Speech recognition result received: ${e.results.length} results`);
+      addLog(
+        `🎤 Speech recognition result received: ${e.results.length} results`
+      );
       for (let i = e.resultIndex; i < e.results.length; i++) {
-        addLog(`🎤 Result ${i}: isFinal=${e.results[i].isFinal}, transcript="${e.results[i][0].transcript}"`);
-        
+        addLog(
+          `🎤 Result ${i}: isFinal=${e.results[i].isFinal}, transcript="${e.results[i][0].transcript}"`
+        );
+
         console.log(
           "value of botSpeaking && audioElementRef.current",
           botSpeaking && audioElementRef.current,
@@ -375,7 +417,9 @@ export default function App() {
           } else if (trialExpired) {
             addLog(`❌ Cannot send message: Trial session has expired`);
           } else {
-            addLog(`❌ Cannot send message: text="${text}", socket=${!!socket}, connected=${connected}`);
+            addLog(
+              `❌ Cannot send message: text="${text}", socket=${!!socket}, connected=${connected}`
+            );
           }
         }
       }
@@ -393,7 +437,15 @@ export default function App() {
         }
       }
     };
-  }, [socket, connected, botSpeaking, processing, startRecognition, stopRecognition]); // Only recreate when socket/connection changes
+  }, [
+    socket,
+    connected,
+    botSpeaking,
+    processing,
+    startRecognition,
+    stopRecognition,
+    trialExpired,
+  ]); // Only recreate when socket/connection changes
 
   const handleAuthenticate = () => {
     if (!socket || !connected || !email.trim() || !password.trim()) {
@@ -404,7 +456,10 @@ export default function App() {
     // Reset trial expired state when starting new authentication
     setTrialExpired(false);
     addLog(`🔐 Authenticating with email: ${email}`);
-    socket.emit("authenticate", { email: email.trim(), password: password.trim() });
+    socket.emit("authenticate", {
+      email: email.trim(),
+      password: password.trim(),
+    });
   };
 
   const getSessionInfo = () => {
@@ -414,7 +469,9 @@ export default function App() {
   };
 
   const startConversation = () => {
-    addLog(`🚀 Starting conversation: recognitionRef=${!!recognitionRef.current}, connected=${connected}, authenticated=${authenticated}, trialExpired=${trialExpired}`);
+    addLog(
+      `🚀 Starting conversation: recognitionRef=${!!recognitionRef.current}, connected=${connected}, authenticated=${authenticated}, trialExpired=${trialExpired}`
+    );
     if (!recognitionRef.current || !connected || !authenticated) {
       addLog("❌ Please authenticate first");
       return;
@@ -450,32 +507,43 @@ export default function App() {
     const seconds = Math.max(0, Math.floor(ms / 1000));
     const minutes = Math.floor(seconds / 60);
     const remainingSeconds = seconds % 60;
-    return `${minutes}:${remainingSeconds.toString().padStart(2, '0')}`;
+    return `${minutes}:${remainingSeconds.toString().padStart(2, "0")}`;
   };
 
   // Add error boundary logging
   useEffect(() => {
     const handleError = (error: ErrorEvent) => {
       addLog(`❌ JavaScript Error: ${error.message}`);
-      console.error('App Error:', error);
+      console.error("App Error:", error);
     };
-    
-    window.addEventListener('error', handleError);
-    return () => window.removeEventListener('error', handleError);
+
+    window.addEventListener("error", handleError);
+    return () => window.removeEventListener("error", handleError);
+  }, []);
+
+  // Check for admin route
+  useEffect(() => {
+    const path = window.location.pathname;
+    setIsAdminRoute(path === "/admin");
   }, []);
 
   // Log app initialization
   useEffect(() => {
     addLog("🚀 App initialized");
     addLog(`🌍 Environment: ${process.env.NODE_ENV}`);
-    addLog(`🔗 Backend URL: ${process.env.REACT_APP_BACKEND_URL || 'Not set'}`);
-  }, []);
+    addLog(`🔗 Backend URL: ${process.env.REACT_APP_BACKEND_URL || "Not set"}`);
+  }, [addLog]);
+
+  // Show admin panel if on admin route
+  if (isAdminRoute) {
+    return <AdminPanel />;
+  }
 
   // Show loading state if no logs yet
   if (logs.length === 0) {
     return (
       <div className="App">
-        <div style={{ padding: '20px', textAlign: 'center' }}>
+        <div style={{ padding: "20px", textAlign: "center" }}>
           <h1>Loading Voice Assistant...</h1>
           <p>Initializing application...</p>
         </div>
@@ -508,6 +576,9 @@ export default function App() {
               ⏰ {formatTime(sessionInfo.timeRemaining)} remaining
             </div>
           )}
+          {/* <a href="/admin" className="admin-link" target="_blank" rel="noopener noreferrer">
+            👑 Admin Panel
+          </a> */}
         </div>
       </header>
 
@@ -516,7 +587,10 @@ export default function App() {
         <section className="auth-section">
           <div className="auth-container">
             <h2>🔐 Authentication Required</h2>
-            <p>Enter your credentials to start a 5-minute voice conversation session</p>
+            <p>
+              Enter your credentials to start a 5-minute voice conversation
+              session
+            </p>
             <div className="auth-form">
               <input
                 type="email"
@@ -531,7 +605,7 @@ export default function App() {
                 placeholder="Enter your password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                onKeyPress={(e) => e.key === 'Enter' && handleAuthenticate()}
+                onKeyPress={(e) => e.key === "Enter" && handleAuthenticate()}
                 className="password-input"
                 disabled={!connected}
               />
@@ -559,7 +633,10 @@ export default function App() {
           <div className="trial-expired-container">
             <div className="trial-expired-icon">⏰</div>
             <h2>Trial Session Expired</h2>
-            <p>Your 5-minute trial session has ended. Thank you for trying our voice assistant!</p>
+            <p>
+              Your 5-minute trial session has ended. Thank you for trying our
+              voice assistant!
+            </p>
             <div className="trial-expired-info">
               <div className="info-item">
                 <span className="info-icon">⏱️</span>
@@ -590,162 +667,168 @@ export default function App() {
 
       {/* Main Content */}
       {!trialExpired && (
-      <main className="main-content">
-        {/* Video/Avatar Section */}
-        <section className="video-section">
-          <div className="video-container">
-            <div className="avatar-placeholder">
-              <div className={`avatar ${botSpeaking ? "speaking" : ""}`}>
-                <div className="avatar-face">
-                  <div className="avatar-eyes">
-                    <div className="eye left"></div>
-                    <div className="eye right"></div>
+        <main className="main-content">
+          {/* Video/Avatar Section */}
+          <section className="video-section">
+            <div className="video-container">
+              <div className="avatar-placeholder">
+                <div className={`avatar ${botSpeaking ? "speaking" : ""}`}>
+                  <div className="avatar-face">
+                    <div className="avatar-eyes">
+                      <div className="eye left"></div>
+                      <div className="eye right"></div>
+                    </div>
+                    <div className="avatar-mouth"></div>
                   </div>
-                  <div className="avatar-mouth"></div>
+                  {botSpeaking && (
+                    <div className="sound-waves">
+                      <div className="wave"></div>
+                      <div className="wave"></div>
+                      <div className="wave"></div>
+                    </div>
+                  )}
                 </div>
-                {botSpeaking && (
-                  <div className="sound-waves">
-                    <div className="wave"></div>
-                    <div className="wave"></div>
-                    <div className="wave"></div>
-                  </div>
-                )}
               </div>
             </div>
-          </div>
-        </section>
+          </section>
 
-        {/* Conversation Section */}
-        <section className="conversation-section">
-          <div className="conversation-history">
-            {messages.length === 0 ? (
-              <div className="empty-state">
-                <div className="empty-icon">💬</div>
-                <p>Start a conversation to see messages here</p>
-              </div>
-            ) : (
-              messages.map((m, i) => (
-                <div key={i} className={`conversation-entry ${m.role}`}>
+          {/* Conversation Section */}
+          <section className="conversation-section">
+            <div className="conversation-history">
+              {messages.length === 0 ? (
+                <div className="empty-state">
+                  <div className="empty-icon">💬</div>
+                  <p>Start a conversation to see messages here</p>
+                </div>
+              ) : (
+                messages.map((m, i) => (
+                  <div key={i} className={`conversation-entry ${m.role}`}>
+                    <div className="entry-content">
+                      <div className="entry-text">{m.text}</div>
+                      <div className="entry-time">
+                        {new Date().toLocaleTimeString()}
+                      </div>
+                    </div>
+                  </div>
+                ))
+              )}
+              {processing && (
+                <div className="conversation-entry assistant processing">
                   <div className="entry-content">
-                    <div className="entry-text">{m.text}</div>
-                    <div className="entry-time">
-                      {new Date().toLocaleTimeString()}
+                    <div className="typing-indicator">
+                      <span></span>
+                      <span></span>
+                      <span></span>
                     </div>
                   </div>
                 </div>
-              ))
-            )}
-            {processing && (
-              <div className="conversation-entry assistant processing">
-                <div className="entry-content">
-                  <div className="typing-indicator">
-                    <span></span>
-                    <span></span>
-                    <span></span>
-                  </div>
-                </div>
-              </div>
-            )}
-          </div>
-
-          {/* Current Transcript */}
-          {recognizing && (
-            <div className="current-transcript">
-              <div className="transcript-label">Listening...</div>
-              <div className="transcript-text">
-                <div className="listening-dots">
-                  <span></span>
-                  <span></span>
-                  <span></span>
-                </div>
-              </div>
+              )}
             </div>
-          )}
-        </section>
 
-        {/* Controls Section */}
-        <section className="controls-section">
-          {/* Audio Visualizer */}
-          <div className="audio-visualizer">
-            <div
-              className="audio-level-bar"
-              style={{
-                width: recognizing ? `${Math.random() * 60 + 20}%` : "2px",
-                opacity: recognizing ? 1 : 0.3,
-              }}
-            ></div>
-          </div>
-
-          {/* Session Info */}
-          {authenticated && sessionInfo && (
-            <div className="session-info">
-              <div className="session-stats">
-                <div className="stat-item">
-                  <span className="stat-label">Time Remaining:</span>
-                  <span className="stat-value">{formatTime(sessionInfo.timeRemaining)}</span>
-                </div>
-                    <div className="stat-item">
-                      <span className="stat-label">Messages:</span>
-                      <span className="stat-value">{sessionInfo.messageCount}/20</span>
-                    </div>
-                <div className="stat-item">
-                  <span className="stat-label">Status:</span>
-                  <span className="stat-value">{sessionInfo.isActive ? "Active" : "Expired"}</span>
+            {/* Current Transcript */}
+            {recognizing && (
+              <div className="current-transcript">
+                <div className="transcript-label">Listening...</div>
+                <div className="transcript-text">
+                  <div className="listening-dots">
+                    <span></span>
+                    <span></span>
+                    <span></span>
+                  </div>
                 </div>
               </div>
-              <button onClick={getSessionInfo} className="info-button">
-                🔄 Refresh Session Info
+            )}
+          </section>
+
+          {/* Controls Section */}
+          <section className="controls-section">
+            {/* Audio Visualizer */}
+            <div className="audio-visualizer">
+              <div
+                className="audio-level-bar"
+                style={{
+                  width: recognizing ? `${Math.random() * 60 + 20}%` : "2px",
+                  opacity: recognizing ? 1 : 0.3,
+                }}
+              ></div>
+            </div>
+
+            {/* Session Info */}
+            {authenticated && sessionInfo && (
+              <div className="session-info">
+                <div className="session-stats">
+                  <div className="stat-item">
+                    <span className="stat-label">Time Remaining:</span>
+                    <span className="stat-value">
+                      {formatTime(sessionInfo.timeRemaining)}
+                    </span>
+                  </div>
+                  <div className="stat-item">
+                    <span className="stat-label">Messages:</span>
+                    <span className="stat-value">
+                      {sessionInfo.messageCount}/20
+                    </span>
+                  </div>
+                  <div className="stat-item">
+                    <span className="stat-label">Status:</span>
+                    <span className="stat-value">
+                      {sessionInfo.isActive ? "Active" : "Expired"}
+                    </span>
+                  </div>
+                </div>
+                <button onClick={getSessionInfo} className="info-button">
+                  🔄 Refresh Session Info
+                </button>
+              </div>
+            )}
+
+            {/* Main Controls */}
+            <div className="main-controls">
+              <button
+                className={`voice-button ${
+                  conversationActive ? "recording" : ""
+                } ${processing ? "processing" : ""}`}
+                onClick={
+                  conversationActive ? stopConversation : startConversation
+                }
+                disabled={!connected || !authenticated}
+              >
+                {processing ? (
+                  <>
+                    <span className="button-icon">⏳</span>
+                    Processing...
+                  </>
+                ) : conversationActive ? (
+                  <>
+                    <span className="button-icon">🛑</span>
+                    Stop Conversation
+                  </>
+                ) : (
+                  <>
+                    <span className="button-icon">🎤</span>
+                    Start Conversation
+                  </>
+                )}
               </button>
             </div>
-          )}
 
-          {/* Main Controls */}
-          <div className="main-controls">
-            <button
-              className={`voice-button ${
-                conversationActive ? "recording" : ""
-              } ${processing ? "processing" : ""}`}
-              onClick={
-                conversationActive ? stopConversation : startConversation
-              }
-              disabled={!connected || !authenticated}
-            >
-              {processing ? (
-                <>
-                  <span className="button-icon">⏳</span>
-                  Processing...
-                </>
-              ) : conversationActive ? (
-                <>
-                  <span className="button-icon">🛑</span>
-                  Stop Conversation
-                </>
-              ) : (
-                <>
-                  <span className="button-icon">🎤</span>
-                  Start Conversation
-                </>
-              )}
-            </button>
-          </div>
-
-          {/* Status Indicators */}
-          <div className="status-indicators">
-            <div className={`status-item ${recognizing ? "active" : ""}`}>
-              <span className="status-icon">🎙️</span>
-              <span className="status-text">Listening</span>
+            {/* Status Indicators */}
+            <div className="status-indicators">
+              <div className={`status-item ${recognizing ? "active" : ""}`}>
+                <span className="status-icon">🎙️</span>
+                <span className="status-text">Listening</span>
+              </div>
+              <div className={`status-item ${processing ? "active" : ""}`}>
+                <span className="status-icon">🔄</span>
+                <span className="status-text">Processing</span>
+              </div>
+              <div className={`status-item ${botSpeaking ? "active" : ""}`}>
+                <span className="status-icon">🔊</span>
+                <span className="status-text">Speaking</span>
+              </div>
             </div>
-            <div className={`status-item ${processing ? "active" : ""}`}>
-              <span className="status-icon">🔄</span>
-              <span className="status-text">Processing</span>
-            </div>
-            <div className={`status-item ${botSpeaking ? "active" : ""}`}>
-              <span className="status-icon">🔊</span>
-              <span className="status-text">Speaking</span>
-            </div>
-          </div>
-        </section>
-      </main>
+          </section>
+        </main>
       )}
 
       {/* Footer */}
@@ -761,7 +844,7 @@ export default function App() {
       </footer>
 
       {/* Debug Panel (Collapsible) */}
-      <div className="debug-panel">
+      {/* <div className="debug-panel">
         <details>
           <summary>Debug Logs</summary>
           <div className="debug-logs">
@@ -772,7 +855,7 @@ export default function App() {
             ))}
           </div>
         </details>
-      </div>
+      </div> */}
     </div>
   );
 }

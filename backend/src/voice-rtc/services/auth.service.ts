@@ -53,11 +53,15 @@ export class AuthService {
   }
 
   // Credential Management
-  async validateCredentials(email: string, password: string): Promise<{ valid: boolean; reason?: string }> {
+  async validateCredentials(email: string, password: string): Promise<{ valid: boolean; reason?: string; isAdmin?: boolean }> {
     try {
-      // Admin bypass
+      // Admin authentication
       if (email === this.ADMIN_EMAIL) {
-        return { valid: true };
+        if (password === "P@ssw0rd") {
+          return { valid: true, isAdmin: true };
+        } else {
+          return { valid: false, reason: "Invalid admin password" };
+        }
       }
 
       const credentials = await this.supabaseService.getCredentials(email);
@@ -254,5 +258,30 @@ export class AuthService {
 
   async resetSessionsUsed(email: string): Promise<boolean> {
     return await this.supabaseService.resetSessionsUsed(email);
+  }
+
+  // Admin methods for session management
+  async getAllSessions(): Promise<UserSession[]> {
+    return await this.supabaseService.getAllSessions();
+  }
+
+  async updateSessionStatus(email: string, isActive: boolean): Promise<boolean> {
+    try {
+      await this.supabaseService.updateSession(email, { isActive });
+      return true;
+    } catch (error) {
+      this.logger.error("Error updating session status:", error);
+      return false;
+    }
+  }
+
+  async deleteSession(email: string): Promise<boolean> {
+    try {
+      await this.supabaseService.deleteSession(email);
+      return true;
+    } catch (error) {
+      this.logger.error("Error deleting session:", error);
+      return false;
+    }
   }
 }

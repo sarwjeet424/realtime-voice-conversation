@@ -7,5 +7,6 @@ import { SupabaseService } from "./services/supabase.service";
 
 @Module({
   providers: [VoiceRtcGateway, OpenAiService, ElevenlabsService, AuthService, SupabaseService],
+  exports: [AuthService, SupabaseService],
 })
 export class VoiceRtcModule {}

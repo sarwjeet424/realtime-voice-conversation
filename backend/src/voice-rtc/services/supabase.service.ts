@@ -269,7 +269,6 @@ export class SupabaseService {
       const { data, error } = await this.supabase
         .from("user_sessions")
         .select("*")
-        .eq("is_active", true)
         .order("start_time", { ascending: false });
 
       if (error) return [];
