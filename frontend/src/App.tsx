@@ -174,6 +174,25 @@ export default function App() {
       }
     });
 
+    s.on("conversation_stopped", ({ success }) => {
+      if (success) {
+        addLog("✅ Conversation stopped successfully");
+      }
+    });
+
+    s.on("conversation_time_update", ({ timeRemaining, isActive }) => {
+      if (isActive && conversationActive) {
+        setSessionInfo(prev => prev ? { ...prev, timeRemaining } : null);
+        
+        // Check if time is up
+        if (timeRemaining <= 0) {
+          addLog("⏰ Conversation time expired");
+          setTrialExpired(true);
+          stopConversation();
+        }
+      }
+    });
+
     s.on("session_expired", ({ message, timeRemaining }) => {
       addLog(`⏰ Session expired: ${message}`);
       addLog(`🔄 Setting trial expired state and stopping all activities`);
@@ -322,6 +341,19 @@ export default function App() {
       s.disconnect();
     };
   }, [startRecognition, stopRecognition, addLog]);
+
+  // Timer for conversation time updates
+  useEffect(() => {
+    if (!conversationActive || !socket || !connected) return;
+
+    const interval = setInterval(() => {
+      if (socket && connected) {
+        socket.emit("get_conversation_time");
+      }
+    }, 1000); // Update every second
+
+    return () => clearInterval(interval);
+  }, [conversationActive, socket, connected]);
 
   // Setup speech recognition once
   useEffect(() => {
@@ -531,6 +563,12 @@ export default function App() {
     // Reset states
     setProcessing(false);
     setBotSpeaking(false);
+    
+    // Emit stop_conversation event to backend
+    if (socket) {
+      addLog("📤 Emitting stop_conversation event");
+      socket.emit("stop_conversation");
+    }
   };
 
   const formatTime = (ms: number) => {
