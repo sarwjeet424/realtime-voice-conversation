@@ -949,6 +949,23 @@
   line-height: 1.5;
 }
 
+.auth-error {
+  background: rgba(255, 107, 107, 0.1);
+  border: 2px solid rgba(255, 107, 107, 0.3);
+  border-radius: 12px;
+  padding: 16px 20px;
+  margin-bottom: 20px;
+  color: #ff6b6b;
+  font-weight: 500;
+  text-align: center;
+  backdrop-filter: blur(10px);
+}
+
+.auth-error p {
+  margin: 0;
+  font-size: 1rem;
+}
+
 .auth-form {
   display: flex;
   flex-direction: column;

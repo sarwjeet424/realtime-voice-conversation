@@ -28,6 +28,7 @@ export default function App() {
   const [conversationActive, setConversationActive] = useState(false);
   const [botSpeaking, setBotSpeaking] = useState(false);
   const [trialExpired, setTrialExpired] = useState(false);
+  const [authError, setAuthError] = useState<string | null>(null);
   const [messages, setMessages] = useState<
     { role: "user" | "assistant"; text: string }[]
   >([]);
@@ -133,6 +134,7 @@ export default function App() {
     s.on("auth_error", ({ message }) => {
       addLog(`❌ Authentication failed: ${message}`);
       setAuthenticated(false);
+      setAuthError(message); // Display error in UI
 
       // Show specific message for blocked users
       if (message.includes("monthly session limit")) {
@@ -146,6 +148,9 @@ export default function App() {
       ) {
         addLog(`🚫 This email has already used its daily session limit`);
         addLog(`⏰ Please try again tomorrow or use a different email address`);
+      } else if (message.includes("Session limit reached")) {
+        addLog(`🚫 Session limit reached for this user`);
+        addLog(`⏰ Please contact admin for new credentials`);
       }
     });
 
@@ -453,8 +458,9 @@ export default function App() {
       return;
     }
 
-    // Reset trial expired state when starting new authentication
+    // Reset trial expired state and clear any previous auth errors when starting new authentication
     setTrialExpired(false);
+    setAuthError(null);
     addLog(`🔐 Authenticating with email: ${email}`);
     socket.emit("authenticate", {
       email: email.trim(),
@@ -591,6 +597,11 @@ export default function App() {
               Enter your credentials to start a 5-minute voice conversation
               session
             </p>
+            {authError && (
+              <div className="auth-error">
+                <p>❌ {authError}</p>
+              </div>
+            )}
             <div className="auth-form">
               <input
                 type="email"
