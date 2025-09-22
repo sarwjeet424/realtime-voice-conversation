@@ -141,6 +141,56 @@ export class VoiceRtcGateway
     }
   }
 
+  @SubscribeMessage("stop_conversation")
+  async handleStopConversation(@ConnectedSocket() client: Socket) {
+    try {
+      const email = (client as any).email || this.clientEmails.get(client.id);
+      
+      if (!email) {
+        client.emit("conversation_error", { message: "Please authenticate first" });
+        return;
+      }
+
+      // Stop conversation timer
+      const stopResult = await this.authService.stopConversation(email);
+      
+      if (!stopResult.success) {
+        this.logger.log(`❌ Conversation stop failed for ${email}: ${stopResult.reason}`);
+        client.emit("conversation_error", { message: stopResult.reason });
+        return;
+      }
+
+      this.logger.log(`✅ Conversation stopped for ${email}`);
+      client.emit("conversation_stopped", { success: true });
+    } catch (err) {
+      this.logger.error(`💥 Conversation stop error for ${client.id}: ${err.message}`);
+      client.emit("conversation_error", { message: err.message });
+    }
+  }
+
+  @SubscribeMessage("get_conversation_time")
+  async handleGetConversationTime(@ConnectedSocket() client: Socket) {
+    try {
+      const email = (client as any).email || this.clientEmails.get(client.id);
+      
+      if (!email) {
+        client.emit("conversation_error", { message: "Please authenticate first" });
+        return;
+      }
+
+      // Get conversation time remaining
+      const timeResult = await this.authService.getConversationTimeRemaining(email);
+      
+      client.emit("conversation_time_update", {
+        timeRemaining: timeResult.timeRemaining,
+        isActive: timeResult.isActive
+      });
+    } catch (err) {
+      this.logger.error(`💥 Conversation time error for ${client.id}: ${err.message}`);
+      client.emit("conversation_error", { message: err.message });
+    }
+  }
+
   @SubscribeMessage("text_message")
   async handleTextMessage(
     @ConnectedSocket() client: Socket,

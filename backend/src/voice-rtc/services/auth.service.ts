@@ -8,6 +8,8 @@ export interface UserSession {
   lastActivity: number;
   messageCount: number;
   isActive: boolean;
+  conversationActive?: boolean;
+  conversationStartTime?: number;
 }
 
 export interface UserCredentials {
@@ -206,12 +208,17 @@ export class AuthService {
         return { success: false, reason: "No active session found" };
       }
 
-      // Check if session is expired
-      const now = Date.now();
-      const timeRemaining = session.startTime + this.SESSION_DURATION - now;
-      if (timeRemaining <= 0) {
-        return { success: false, reason: "Session has expired" };
+      // Check if conversation is already active
+      if (session.conversationActive) {
+        return { success: false, reason: "Conversation is already active" };
       }
+
+      // Start conversation timer - set conversation start time
+      const conversationStartTime = Date.now();
+      await this.supabaseService.updateSession(email, { 
+        conversationStartTime,
+        conversationActive: true 
+      });
 
       // Increment sessions used only when starting conversation
       await this.supabaseService.incrementSessionsUsed(email);
@@ -220,11 +227,53 @@ export class AuthService {
         success: true,
         sessionId: `${email}_${session.startTime}_${Math.random().toString(36).substr(2, 9)}`,
         messageCount: session.messageCount,
-        timeRemaining,
+        timeRemaining: this.SESSION_DURATION, // Full 5 minutes when starting
       };
     } catch (error) {
       this.logger.error("Error starting conversation:", error);
       return { success: false, reason: "Failed to start conversation" };
+    }
+  }
+
+  async stopConversation(email: string): Promise<{ success: boolean; reason?: string }> {
+    try {
+      // Check if user has an active session
+      const session = await this.supabaseService.getActiveSession(email);
+      if (!session) {
+        return { success: false, reason: "No active session found" };
+      }
+
+      // Stop conversation timer
+      await this.supabaseService.updateSession(email, { 
+        conversationActive: false 
+      });
+
+      return { success: true };
+    } catch (error) {
+      this.logger.error("Error stopping conversation:", error);
+      return { success: false, reason: "Failed to stop conversation" };
+    }
+  }
+
+  async getConversationTimeRemaining(email: string): Promise<{ timeRemaining: number; isActive: boolean }> {
+    try {
+      const session = await this.supabaseService.getActiveSession(email);
+      if (!session) {
+        return { timeRemaining: 0, isActive: false };
+      }
+
+      if (!session.conversationActive || !session.conversationStartTime) {
+        return { timeRemaining: this.SESSION_DURATION, isActive: false };
+      }
+
+      const now = Date.now();
+      const elapsed = now - session.conversationStartTime;
+      const timeRemaining = Math.max(0, this.SESSION_DURATION - elapsed);
+
+      return { timeRemaining, isActive: true };
+    } catch (error) {
+      this.logger.error("Error getting conversation time remaining:", error);
+      return { timeRemaining: 0, isActive: false };
     }
   }
 

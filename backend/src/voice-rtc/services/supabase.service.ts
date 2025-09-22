@@ -223,6 +223,8 @@ export class SupabaseService {
       if (updates.lastActivity) updateData.last_activity = updates.lastActivity;
       if (updates.messageCount !== undefined) updateData.message_count = updates.messageCount;
       if (updates.isActive !== undefined) updateData.is_active = updates.isActive;
+      if (updates.conversationActive !== undefined) updateData.conversation_active = updates.conversationActive;
+      if (updates.conversationStartTime) updateData.conversation_start_time = updates.conversationStartTime;
 
       const { error } = await this.supabase
         .from("user_sessions")
@@ -255,6 +257,8 @@ export class SupabaseService {
         lastActivity: data.last_activity,
         messageCount: data.message_count,
         isActive: data.is_active,
+        conversationActive: data.conversation_active || false,
+        conversationStartTime: data.conversation_start_time,
       };
     } catch (error) {
       this.logger.error("Error getting active session:", error);
