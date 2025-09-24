@@ -1,42 +1,18 @@
-import { Controller, Get, Post, Put, Delete, Body, Param, Query, UseGuards, Logger } from '@nestjs/common';
-import { AuthService, UserCredentials, UserSession } from '../voice-rtc/services/auth.service';
+import { Controller, Get, Post, Put, Delete, Body, Param, UseGuards, Logger, Req } from '@nestjs/common';
+import { AuthService } from '../voice-rtc/services/auth.service';
+import { AdminAuthGuard } from '../auth/admin-auth.guard';
+import { TokenService } from '../auth/token.service';
 
 @Controller('admin')
 export class AdminController {
   private readonly logger = new Logger('AdminController');
 
-  constructor(private authService: AuthService) {}
+  constructor(private authService: AuthService, private tokens: TokenService) {}
 
-  // Admin authentication
-  @Post('login')
-  async adminLogin(@Body() credentials: { email: string; password: string }) {
-    try {
-      const result = await this.authService.validateCredentials(credentials.email, credentials.password);
-      
-      if (result.valid && result.isAdmin) {
-        this.logger.log(`Admin login successful: ${credentials.email}`);
-        return {
-          success: true,
-          message: 'Admin login successful',
-          isAdmin: true
-        };
-      } else {
-        this.logger.log(`Admin login failed: ${credentials.email} - ${result.reason}`);
-        return {
-          success: false,
-          message: result.reason || 'Invalid admin credentials'
-        };
-      }
-    } catch (error) {
-      this.logger.error('Admin login error:', error);
-      return {
-        success: false,
-        message: 'Admin login failed'
-      };
-    }
-  }
+  // Admin login moved to AuthController
 
   // User Credentials Management
+  @UseGuards(AdminAuthGuard)
   @Get('credentials')
   async getAllCredentials() {
     try {
@@ -54,8 +30,9 @@ export class AdminController {
     }
   }
 
+  @UseGuards(AdminAuthGuard)
   @Post('credentials')
-  async createCredentials(@Body() credentials: Omit<UserCredentials, 'id' | 'createdAt' | 'updatedAt'>) {
+  async createCredentials(@Body() credentials: any) {
     try {
       const success = await this.authService.createCredentials(credentials);
       if (success) {
@@ -79,10 +56,11 @@ export class AdminController {
     }
   }
 
+  @UseGuards(AdminAuthGuard)
   @Put('credentials/:email')
   async updateCredentials(
     @Param('email') email: string,
-    @Body() updates: Partial<UserCredentials>
+    @Body() updates: any
   ) {
     try {
       const success = await this.authService.updateCredentials(email, updates);
@@ -107,6 +85,7 @@ export class AdminController {
     }
   }
 
+  @UseGuards(AdminAuthGuard)
   @Delete('credentials/:email')
   async deleteCredentials(@Param('email') email: string) {
     try {
@@ -132,6 +111,7 @@ export class AdminController {
     }
   }
 
+  @UseGuards(AdminAuthGuard)
   @Post('credentials/:email/reset-sessions')
   async resetSessionsUsed(@Param('email') email: string) {
     try {
@@ -158,6 +138,7 @@ export class AdminController {
   }
 
   // Session Management
+  @UseGuards(AdminAuthGuard)
   @Get('sessions')
   async getAllSessions() {
     try {
@@ -175,6 +156,7 @@ export class AdminController {
     }
   }
 
+  @UseGuards(AdminAuthGuard)
   @Put('sessions/:email/status')
   async updateSessionStatus(
     @Param('email') email: string,
@@ -203,6 +185,7 @@ export class AdminController {
     }
   }
 
+  @UseGuards(AdminAuthGuard)
   @Delete('sessions/:email')
   async deleteSession(@Param('email') email: string) {
     try {

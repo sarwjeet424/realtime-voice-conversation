@@ -917,7 +917,7 @@ export default function App() {
       </footer>
 
       {/* Debug Panel (Collapsible) */}
-      {/* <div className="debug-panel">
+      <div className="debug-panel">
         <details>
           <summary>Debug Logs</summary>
           <div className="debug-logs">
@@ -928,7 +928,7 @@ export default function App() {
             ))}
           </div>
         </details>
-      </div> */}
+      </div>
     </div>
   );
 }
