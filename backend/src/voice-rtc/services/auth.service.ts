@@ -333,7 +333,17 @@ export class AuthService {
   }
 
   async resetSessionsUsed(email: string): Promise<boolean> {
-    return await this.supabaseService.resetSessionsUsed(email);
+    // Reset the user's sessions used count and also deactivate any active session
+    const resetOk = await this.supabaseService.resetSessionsUsed(email);
+    if (!resetOk) return false;
+    try {
+      await this.supabaseService.deleteSession(email);
+    } catch (error) {
+      this.logger.error("Error deactivating active session during reset:", error);
+      // Even if deactivation fails, surface failure so admin can retry
+      return false;
+    }
+    return true;
   }
 
   // Admin methods for session management

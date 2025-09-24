@@ -381,6 +381,7 @@ export default function Conversation() {
               ⏰ {formatTime(sessionInfo.timeRemaining)} remaining
             </div>
           )}
+        <button onClick={logoutUser} className="logout-button">Logout</button>
         </div>
       </header>
 

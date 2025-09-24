@@ -1246,3 +1246,14 @@
 .conversation-history::-webkit-scrollbar-thumb:hover {
   background: rgba(0, 255, 136, 0.5);
 }
+
+.logout-button {
+  border-radius: 12px;
+  padding: 10px 20px;
+  background: linear-gradient(135deg, #fa3333 0%, #f82828 100%);
+  color: #ffffff;
+  border: none;
+  font-size: 1.1rem;
+  cursor: pointer;
+  transition: all 0.3s ease;
+}
