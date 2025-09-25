@@ -69,7 +69,7 @@ export default function Conversation() {
   const logoutUser = useCallback(() => {
     try {
       localStorage.removeItem('userAccessToken');
-      sessionStorage.removeItem('userEmail');
+      sessionStorage.removeItem('username');
       sessionStorage.removeItem('userPassword');
     } catch (_e) {}
     try {
@@ -312,7 +312,7 @@ export default function Conversation() {
 
   const startConversation = () => {
     if (!recognitionRef.current || !authenticated) return;
-    const email = sessionStorage.getItem("userEmail");
+    const email = sessionStorage.getItem("username");
     const password = sessionStorage.getItem("userPassword");
     if (!email || !password) {
       alert("Please login first.");
@@ -322,7 +322,7 @@ export default function Conversation() {
     const s = getSocket();
     setSocket(s);
     const emitAuth = () => {
-      s.emit("authenticate", { email, password });
+      s.emit("authenticate", { username: email, password });
     };
     const onAuthSuccess = () => {
       s.emit("start_conversation");

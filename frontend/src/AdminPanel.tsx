@@ -392,9 +392,9 @@ const AdminPanel: React.FC = () => {
           <form onSubmit={editingCredential ? handleUpdateCredential : handleCreateCredential} className="credential-form">
             <div className="form-row">
               <div className="form-group">
-                <label>Email:</label>
+              <label>Username:</label>
                 <input
-                  type="email"
+                type="text"
                   value={credentialForm.email}
                   onChange={(e) => setCredentialForm({ ...credentialForm, email: e.target.value })}
                   required
@@ -446,7 +446,7 @@ const AdminPanel: React.FC = () => {
             <table>
               <thead>
                 <tr>
-                  <th>Email</th>
+                  <th>Username</th>
                   <th>Password</th>
                   <th>Active</th>
                   <th>Session Limit</th>

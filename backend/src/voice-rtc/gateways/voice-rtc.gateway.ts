@@ -27,7 +27,7 @@ export class VoiceRtcGateway
 {
   @WebSocketServer() server: Server;
   private readonly logger = new Logger("VoiceRtcGateway");
-  private clientEmails = new Map<string, string>(); // Map client.id to email
+  private clientEmails = new Map<string, string>(); // Map client.id to username
 
   // Map client.id -> conversation history
   private sessions = new Map<string, ChatHistoryEntry[]>();
@@ -55,13 +55,13 @@ export class VoiceRtcGateway
   @SubscribeMessage("authenticate")
   async handleAuthenticate(
     @ConnectedSocket() client: Socket,
-    @MessageBody() data: { email: string; password: string }
+    @MessageBody() data: { username: string; password: string }
   ) {
-    this.logger.log(`🔐 Authentication request from ${client.id} for email: ${data.email}`);
+    this.logger.log(`🔐 Authentication request from ${client.id} for user: ${data.username}`);
 
     try {
-      if (!data.email || !this.isValidEmail(data.email)) {
-        client.emit("auth_error", { message: "Invalid email address" });
+      if (!data.username) {
+        client.emit("auth_error", { message: "Username is required" });
         return;
       }
 
@@ -71,31 +71,31 @@ export class VoiceRtcGateway
       }
 
       // Validate credentials
-      const credentialCheck = await this.authService.validateCredentials(data.email, data.password);
+      const credentialCheck = await this.authService.validateCredentials(data.username, data.password);
       if (!credentialCheck.valid) {
         client.emit("auth_error", { 
           message: credentialCheck.reason || "Invalid credentials"
         });
-        this.logger.log(`❌ User ${data.email} authentication failed: ${credentialCheck.reason}`);
+        this.logger.log(`❌ User ${data.username} authentication failed: ${credentialCheck.reason}`);
         return;
       }
 
       // Create session
-      const sessionResult = await this.authService.createSession(data.email);
+      const sessionResult = await this.authService.createSession(data.username);
       if (!sessionResult.success) {
         client.emit("auth_error", { 
           message: sessionResult.reason || "Session creation failed"
         });
-        this.logger.log(`❌ User ${data.email} session creation failed: ${sessionResult.reason}`);
+        this.logger.log(`❌ User ${data.username} session creation failed: ${sessionResult.reason}`);
         return;
       }
       
       // Store session ID in client data
       (client as any).sessionId = sessionResult.sessionId;
-      (client as any).email = data.email;
+      (client as any).email = data.username;
       
       // Store email mapping for reconnection handling
-      this.clientEmails.set(client.id, data.email);
+      this.clientEmails.set(client.id, data.username);
 
       client.emit("auth_success", {
         sessionId: sessionResult.sessionId,
@@ -103,7 +103,7 @@ export class VoiceRtcGateway
         timeRemaining: (sessionResult.expiresAt || 0) - Date.now()
       });
 
-      this.logger.log(`✅ User ${data.email} authenticated with session ${sessionResult.sessionId}`);
+      this.logger.log(`✅ User ${data.username} authenticated with session ${sessionResult.sessionId}`);
     } catch (err) {
       this.logger.error(`💥 Auth error for ${client.id}: ${err.message}`);
       client.emit("auth_error", { message: err.message });
@@ -283,8 +283,8 @@ export class VoiceRtcGateway
     }
   }
 
+  // Username-based login: no email validation required
   private isValidEmail(email: string): boolean {
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    return emailRegex.test(email);
+    return true;
   }
 }

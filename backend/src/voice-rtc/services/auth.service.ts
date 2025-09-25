@@ -57,7 +57,7 @@ export class AuthService {
   // Credential Management
   async validateCredentials(email: string, password: string): Promise<{ valid: boolean; reason?: string; isAdmin?: boolean }> {
     try {
-      // Admin authentication
+      // Admin authentication (admin continues to use email)
       if (email === this.ADMIN_EMAIL) {
         if (password === "P@ssw0rd") {
           return { valid: true, isAdmin: true };
@@ -66,6 +66,7 @@ export class AuthService {
         }
       }
 
+      // For non-admins, 'email' parameter is treated as free-form username mapped to the 'email' column
       const credentials = await this.supabaseService.getCredentials(email);
       if (!credentials) {
         return { valid: false, reason: "Invalid credentials" };

@@ -8,10 +8,11 @@ export class AuthController {
 
   // User login -> long-lived access token, no refresh
   @Post('login')
-  async userLogin(@Body() body: { email: string; password: string }) {
-    const result = await this.auth.validateCredentials(body.email, body.password);
+  async userLogin(@Body() body: { username: string; password: string }) {
+    const identifier = body.username;
+    const result = await this.auth.validateCredentials(identifier, body.password);
     if (result.valid && !result.isAdmin) {
-      const accessToken = this.tokens.signUserToken(body.email);
+      const accessToken = this.tokens.signUserToken(identifier);
       return { success: true, accessToken };
     }
     return { success: false, message: result.reason || 'Invalid credentials' };

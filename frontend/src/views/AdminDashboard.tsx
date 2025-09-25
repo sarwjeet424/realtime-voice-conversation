@@ -290,8 +290,8 @@ export default function AdminDashboard() {
           <form onSubmit={editingCredential ? handleUpdateCredential : handleCreateCredential} className="credential-form">
             <div className="form-row">
               <div className="form-group">
-                <label>Email:</label>
-                <input type="email" value={credentialForm.email} onChange={(e) => setCredentialForm({ ...credentialForm, email: e.target.value })} required />
+                <label>Username:</label>
+                <input type="text" value={credentialForm.email} onChange={(e) => setCredentialForm({ ...credentialForm, email: e.target.value })} required />
               </div>
               <div className="form-group">
                 <label>Password:</label>
@@ -318,7 +318,7 @@ export default function AdminDashboard() {
             <table>
               <thead>
                 <tr>
-                  <th>Email</th>
+                  <th>Username</th>
                   <th>Password</th>
                   <th>Active</th>
                   <th>Session Limit</th>
@@ -366,7 +366,7 @@ export default function AdminDashboard() {
             <table>
               <thead>
                 <tr>
-                  <th>Email</th>
+                  <th>Username</th>
                   <th>Start Time</th>
                   <th>Last Activity</th>
                   <th>Message Count</th>

@@ -22,13 +22,13 @@ export default function Login() {
       const res = await fetch(`${API_BASE}/login`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: email.trim(), password: password.trim() }),
+        body: JSON.stringify({ username: email.trim(), password: password.trim() }),
       });
       const data = await res.json();
       if (data.success && data.accessToken) {
         localStorage.setItem('userAccessToken', data.accessToken);
         // store credentials for socket authentication on conversation start
-        sessionStorage.setItem('userEmail', email.trim());
+        sessionStorage.setItem('username', email.trim());
         sessionStorage.setItem('userPassword', password.trim());
         setAuthenticated(true);
       } else {
@@ -54,8 +54,8 @@ export default function Login() {
           )}
           <div className="auth-form">
             <input
-              type="email"
-              placeholder="Enter your email address"
+              type="text"
+              placeholder="Enter your username"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               className="email-input"
