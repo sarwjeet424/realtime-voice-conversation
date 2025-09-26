@@ -495,21 +495,15 @@ export default function Conversation() {
                     </span>
                   </div>
                   <div className="stat-item">
-                    <span className="stat-label">Messages:</span>
-                    <span className="stat-value">
-                      {sessionInfo.messageCount}/20
-                    </span>
-                  </div>
-                  <div className="stat-item">
                     <span className="stat-label">Status:</span>
                     <span className="stat-value">
                       {sessionInfo.isActive ? "Active" : "Expired"}
                     </span>
                   </div>
                 </div>
-                <button onClick={getSessionInfo} className="info-button">
+                {/* <button onClick={getSessionInfo} className="info-button">
                   🔄 Refresh Session Info
-                </button>
+                </button> */}
               </div>
             )}
             <div className="main-controls">
@@ -565,7 +559,7 @@ export default function Conversation() {
           <span>Speech Recognition</span>
         </div>
       </footer>
-      <div className="debug-panel">
+      {/* <div className="debug-panel">
         <details>
           <summary>Debug Logs</summary>
           <div className="debug-logs">
@@ -576,7 +570,7 @@ export default function Conversation() {
             ))}
           </div>
         </details>
-      </div>
+      </div> */}
     </div>
   );
 }
